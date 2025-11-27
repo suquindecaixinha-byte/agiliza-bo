@@ -1,5 +1,4 @@
 import google.generativeai as genai
-# 1. ADICIONE O get_bot_email NA IMPORTAÇÃO ABAIXO:
 from tools import create_calendar_event, create_google_doc, get_bot_email 
 from memory import save_message, get_chat_history, get_user_email, register_user
 import os
@@ -10,7 +9,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- BLINDAGEM DE INICIALIZAÇÃO ---
-# Se der erro aqui, o servidor não cai, apenas registra o erro.
 model = None
 erro_inicializacao = None
 
@@ -72,26 +70,26 @@ def process_ai_request(user_text: str, user_id: str, file_path=None):
             register_user(user_id, email_candidato)
             save_message(user_id, "user", user_text)
             
-            # --- 2. AQUI ESTÁ A MUDANÇA NA MENSAGEM ---
-            bot_email = get_bot_email() # Pega o email automaticamente
+            # --- ATUALIZAÇÃO: MENSAGEM CURTA + LINK DIRETO ---
+            bot_email = get_bot_email()
+            
+            # Link mágico: Vai direto para as configs da agenda desse e-mail
+            link_config = f"https://calendar.google.com/calendar/u/0/r/settings/calendar/{email_candidato}"
             
             mensagem_instrucoes = (
-                f"✅ **Cadastro realizado com sucesso!**\n"
-                f"E-mail registrado: {email_candidato}\n\n"
-                f"⚠️ **PARA EU FUNCIONAR, FAÇA ISSO AGORA:**\n\n"
-                f"Preciso que você compartilhe sua agenda comigo para que eu possa criar reuniões.\n"
-                f"1. Abra o Google Agenda (calendar.google.com)\n"
-                f"2. Vá em Configurações > Compartilhar com pessoas específicas\n"
-                f"3. Adicione este meu e-mail abaixo:\n\n"
-                f"`{bot_email}`\n\n"
-                f"4. 🚨 **MUITO IMPORTANTE:** Mude a permissão para **'Fazer alterações em eventos'**.\n\n"
-                f"Assim que fizer isso, me avise dizendo 'Pronto'!"
+                f"✅ **Cadastro: {email_candidato}**\n\n"
+                f"⚡ **Ative o agendamento em 3 passos:**\n\n"
+                f"1. [Clique aqui para abrir a Configuração]({link_config})\n"
+                f"2. Em 'Compartilhar com pessoas', adicione:\n"
+                f"`{bot_email}`\n"
+                f"3. 🚨 Permissão: Mude para **'Fazer alterações em eventos'**.\n\n"
+                f"Responda **'Pronto'** quando terminar!"
             )
             return mensagem_instrucoes
-            # ------------------------------------------
+            # -------------------------------------------------
             
         else:
-            return "Olá! Sou a Agiliza. Não identifiquei seu cadastro. Por favor, digite o e-mail da sua conta Google (ex: joao@gmail.com) para começarmos."
+            return "Olá! Sou a Agiliza. Não identifiquei seu cadastro. Digite seu e-mail do Google (ex: joao@gmail.com) para configurar."
 
     # --- PASSO 2: EXECUÇÃO NORMAL ---
     try:
@@ -118,5 +116,4 @@ def process_ai_request(user_text: str, user_id: str, file_path=None):
 
     except Exception as e:
         print(f"❌ [ERRO EXECUÇÃO]: {e}")
-
         return f"Erro técnico durante a resposta: {e}"
