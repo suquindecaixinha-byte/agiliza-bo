@@ -81,15 +81,15 @@ def process_ai_request(user_text: str, user_id: str, file_path=None):
             
             mensagem_instrucoes = (
                 f"Cadastro: {email_candidato}\n\n"
-                f"Ative em 3 passos rápidos:\n\n"
-                f"1. [Toque aqui para Configurar]({link_config})\n"
-                f"(Vai abrir no navegador)\n\n"
+                f"Ative da seguinte forma:\n\n"
+                f"1.Entre NO GOOGLE AGENDA WEB ({link_config})\n"
+                f"Em seguida: siga os passos: (Menu > Configurações > A sua conta > O calendário > Compartilhar)\n\n"
                 f"2. Em 'Compartilhar com pessoas', cole isto:\n\n"
                 f"`{bot_email}`\n\n"
                 f"Toque no e-mail acima para copiar\n\n"
                 f"3. Mude a permissão para:\n"
                 f"'Fazer alterações em eventos'\n\n"
-                f"Depois digite: Pronto"
+                f"Depois que tudo estiver certo, é só digitar: Pronto"
             )
             return mensagem_instrucoes
             # ----------------------------------------
@@ -123,5 +123,6 @@ def process_ai_request(user_text: str, user_id: str, file_path=None):
     except Exception as e:
         print(f"❌ [ERRO EXECUÇÃO]: {e}")
         return f"Erro técnico durante a resposta: {e}"
+
 
 
