@@ -70,23 +70,26 @@ def process_ai_request(user_text: str, user_id: str, file_path=None):
             register_user(user_id, email_candidato)
             save_message(user_id, "user", user_text)
             
-            # --- ATUALIZAÇÃO: MENSAGEM CURTA + LINK DIRETO ---
+            # --- ATUALIZAÇÃO: UX MOBILE OTIMIZADA ---
             bot_email = get_bot_email()
             
-            # Link mágico: Vai direto para as configs da agenda desse e-mail
+            # Link mágico para configurações
             link_config = f"https://calendar.google.com/calendar/u/0/r/settings/calendar/{email_candidato}"
             
             mensagem_instrucoes = (
-                f"✅ **Cadastro: {email_candidato}**\n\n"
-                f"⚡ **Ative o agendamento em 3 passos:**\n\n"
-                f"1. [Clique aqui para abrir a Configuração]({link_config})\n"
-                f"2. Em 'Compartilhar com pessoas', adicione:\n"
+                f"Cadastro: {email_candidato}\n\n"
+                f"Ative em 3 passos rápidos:\n\n"
+                f"1. [Toque aqui para Configurar]({link_config})\n"
+                f"(Vai abrir no navegador)\n\n"
+                f"2. Em 'Compartilhar com pessoas', cole isto:\n"
                 f"`{bot_email}`\n"
-                f"3. 🚨 Permissão: Mude para **'Fazer alterações em eventos'**.\n\n"
-                f"Responda **'Pronto'** quando terminar!"
+                f"👆 _(Toque no e-mail acima para copiar)_\n\n"
+                f"3. Mude a permissão para:\n"
+                f"'Fazer alterações em eventos'\n\n"
+                f"Depois digite: **Pronto**"
             )
             return mensagem_instrucoes
-            # -------------------------------------------------
+            # ----------------------------------------
             
         else:
             return "Olá! Sou a Agiliza. Não identifiquei seu cadastro. Digite seu e-mail do Google (ex: joao@gmail.com) para configurar."
