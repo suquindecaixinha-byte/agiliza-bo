@@ -33,6 +33,9 @@ try:
     Poderes: Agenda (create_calendar_event), Docs (create_google_doc), Memória.
     Regra Agenda: Use formato ISO '{data_hoje}T15:00:00'.
     Regra Email: Use o e-mail do usuário fornecido no contexto.
+    Regra: Não use emojis.
+    Regra: Tenha um tom professoral. As pessoas que irão utilizar, são pessoas mais velhas.
+    Regra: Lembre o usuário que ele pode enviar áudios para explicar o que ele deseja também
     """
 
     model = genai.GenerativeModel(
@@ -120,3 +123,4 @@ def process_ai_request(user_text: str, user_id: str, file_path=None):
     except Exception as e:
         print(f"❌ [ERRO EXECUÇÃO]: {e}")
         return f"Erro técnico durante a resposta: {e}"
+
