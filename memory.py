@@ -4,12 +4,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# BUSCA AS CHAVES DAS VARIÁVEIS DE AMBIENTE (MAIS SEGURO)
+# --- CONEXÃO SEGURA COM SUPABASE ---
+# Tenta pegar das variáveis de ambiente (Render)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
+# Se não encontrar, avisa (evita o crash silencioso)
 if not SUPABASE_URL or not SUPABASE_KEY:
-    print("❌ ERRO: Variáveis SUPABASE_URL ou SUPABASE_KEY não encontradas.")
+    print("⚠️ AVISO: Variáveis SUPABASE_URL ou SUPABASE_KEY não encontradas.")
     supabase = None
 else:
     try:
@@ -17,6 +19,8 @@ else:
     except Exception as e:
         print(f"❌ Erro fatal ao conectar no Supabase: {e}")
         supabase = None
+
+# --- FUNÇÕES DE MEMÓRIA (MENSAGENS) ---
 
 def save_message(user_id: str, role: str, content: str):
     """Salva uma mensagem no banco."""
@@ -56,3 +60,28 @@ def get_chat_history(user_id: str, limit=10):
     except Exception as e:
         print(f"⚠️ Erro ao buscar memória: {e}")
         return []
+
+# --- FUNÇÕES DE USUÁRIO (QUE FALTAVAM) ---
+
+def get_user_email(user_id: str):
+    """Verifica se o usuário já tem email cadastrado na tabela 'users'."""
+    if not supabase: return None
+    try:
+        response = supabase.table("users").select("email").eq("user_id", str(user_id)).execute()
+        if response.data and len(response.data) > 0:
+            return response.data[0]["email"]
+        return None
+    except Exception as e:
+        print(f"⚠️ Erro ao buscar usuário: {e}")
+        return None
+
+def register_user(user_id: str, email: str):
+    """Cadastra ou atualiza um usuário na tabela 'users'."""
+    if not supabase: return
+    try:
+        # Usamos upsert para criar ou atualizar se já existir
+        data = {"user_id": str(user_id), "email": email}
+        supabase.table("users").upsert(data).execute()
+        print(f"👤 [CADASTRO] Novo usuário registrado: {email}")
+    except Exception as e:
+        print(f"⚠️ Erro ao registrar usuário: {e}")
