@@ -77,19 +77,19 @@ def process_ai_request(user_text: str, user_id: str, file_path=None):
             bot_email = get_bot_email()
             
             # Link mágico para configurações
-            link_config = f"https://calendar.google.com/calendar/u/0/r/settings/calendar/{email_candidato}"
+            link_config = f"https://calendar.google.com/"
             
             mensagem_instrucoes = (
                 f"Cadastro: {email_candidato}\n\n"
                 f"Ative em 3 passos rápidos:\n\n"
                 f"1. [Toque aqui para Configurar]({link_config})\n"
                 f"(Vai abrir no navegador)\n\n"
-                f"2. Em 'Compartilhar com pessoas', cole isto:\n"
-                f"`{bot_email}`\n"
-                f"👆 _(Toque no e-mail acima para copiar)_\n\n"
+                f"2. Em 'Compartilhar com pessoas', cole isto:\n\n"
+                f"`{bot_email}`\n\n"
+                f"Toque no e-mail acima para copiar\n\n"
                 f"3. Mude a permissão para:\n"
                 f"'Fazer alterações em eventos'\n\n"
-                f"Depois digite: **Pronto**"
+                f"Depois digite: Pronto"
             )
             return mensagem_instrucoes
             # ----------------------------------------
@@ -123,4 +123,5 @@ def process_ai_request(user_text: str, user_id: str, file_path=None):
     except Exception as e:
         print(f"❌ [ERRO EXECUÇÃO]: {e}")
         return f"Erro técnico durante a resposta: {e}"
+
 
