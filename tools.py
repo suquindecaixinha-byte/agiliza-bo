@@ -95,4 +95,15 @@ def create_google_doc(title: str, content: str):
 
     except Exception as e:
         print(f"❌ [TOOLS] Erro Doc: {e}")
+
         return f"Erro ao criar documento: {str(e)}"
+
+# --- Adicione isso no final do arquivo tools.py ---
+
+def get_bot_email():
+    """Retorna o email do robô para ser mostrado ao usuário."""
+    try:
+        creds = get_creds()
+        return creds.service_account_email
+    except:
+        return "[Erro ao obter e-mail do robô]"
