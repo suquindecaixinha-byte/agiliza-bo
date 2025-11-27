@@ -1,75 +1,103 @@
+import google.generativeai as genai
+from tools import create_calendar_event, create_google_doc
+from memory import save_message, get_chat_history, get_user_email, register_user
 import os
-from supabase import create_client, Client
+import datetime
+import re
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# --- CONFIGURAÇÃO ---
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    print("❌ ERRO: Chaves do Supabase não encontradas no .env")
+# --- BLINDAGEM DE INICIALIZAÇÃO ---
+# Se der erro aqui, o servidor não cai, apenas registra o erro.
+model = None
+erro_inicializacao = None
 
 try:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError("A variável GOOGLE_API_KEY não foi encontrada no Render.")
+
+    genai.configure(api_key=api_key)
+
+    tools_config = [create_calendar_event, create_google_doc]
+
+    # Contexto Temporal
+    agora = datetime.datetime.now()
+    data_hoje = agora.strftime("%Y-%m-%d")
+    hora_atual = agora.strftime("%H:%M")
+    dia_semana = agora.strftime("%A")
+
+    SYSTEM_PROMPT = f"""
+    Você é a Agiliza.
+    Hoje é: {data_hoje} ({dia_semana}) - {hora_atual}.
+    Poderes: Agenda (create_calendar_event), Docs (create_google_doc), Memória.
+    Regra Agenda: Use formato ISO '{data_hoje}T15:00:00'.
+    Regra Email: Use o e-mail do usuário fornecido no contexto.
+    """
+
+    model = genai.GenerativeModel(
+        model_name='gemini-2.0-flash-001',
+        tools=tools_config,
+        system_instruction=SYSTEM_PROMPT
+    )
+    print("✅ [CÉREBRO] Gemini inicializado com sucesso!")
+
 except Exception as e:
-    print(f"❌ Erro fatal ao conectar no Supabase: {e}")
-    supabase = None
+    print(f"❌ [CÉREBRO] Erro Fatal na Inicialização: {e}")
+    erro_inicializacao = str(e)
+    model = None
 
-# --- FUNÇÕES DE USUÁRIO (NOVO) ---
-def get_user_email(telegram_id: str):
-    """Busca o email do usuário pelo ID do Telegram."""
-    if not supabase: return None
+# ----------------------------------
+
+def is_valid_email(text):
+    return re.match(r"[^@]+@[^@]+\.[^@]+", text)
+
+def process_ai_request(user_text: str, user_id: str, file_path=None):
+    # Se o cérebro quebrou ao ligar, avisa o usuário
+    if erro_inicializacao:
+        return f"🚨 O Bot está online, mas o cérebro falhou: {erro_inicializacao}. Verifique as Variáveis de Ambiente no Render."
+
+    print(f"🧠 [CÉREBRO] Usuário {user_id} disse: {user_text}")
+    
+    # --- PASSO 1: VERIFICAÇÃO DE USUÁRIO (Cadastro) ---
     try:
-        # Cria a tabela users se não existir (apenas segurança)
-        # Idealmente rode o SQL no painel do Supabase:
-        # create table users (telegram_id text primary key, email text);
+        user_email = get_user_email(user_id)
+    except Exception as e:
+        return f"Erro ao conectar no banco de memória: {e}"
+
+    if not user_email:
+        if user_text and is_valid_email(user_text.strip()):
+            email_candidato = user_text.strip()
+            register_user(user_id, email_candidato)
+            save_message(user_id, "user", user_text)
+            return f"Cadastro realizado: {email_candidato}. Agora compartilhe sua agenda com meu robô e vamos lá!"
+        else:
+            return "Olá! Sou a Agiliza. Não identifiquei seu cadastro. Digite seu e-mail do Google Agenda."
+
+    # --- PASSO 2: EXECUÇÃO NORMAL ---
+    try:
+        history = get_chat_history(user_id, limit=10)
+        chat = model.start_chat(history=history, enable_automatic_function_calling=True)
         
-        response = supabase.table("users").select("email").eq("telegram_id", str(telegram_id)).execute()
-        if response.data and len(response.data) > 0:
-            return response.data[0]['email']
-        return None
-    except Exception as e:
-        print(f"⚠️ Erro ao buscar usuário: {e}")
-        return None
+        inputs = []
+        inputs.append(f"CONTEXTO DO USUÁRIO: O e-mail autenticado é '{user_email}'.")
 
-def register_user(telegram_id: str, email: str):
-    """Salva um novo usuário no banco."""
-    if not supabase: return False
-    try:
-        data = {"telegram_id": str(telegram_id), "email": email.strip().lower()}
-        supabase.table("users").upsert(data).execute()
-        return True
-    except Exception as e:
-        print(f"⚠️ Erro ao registrar usuário: {e}")
-        return False
-
-# --- FUNÇÕES DE MEMÓRIA (MANTIDAS) ---
-def save_message(user_id: str, role: str, content: str):
-    if not supabase: return
-    try:
-        data = {"user_id": str(user_id), "role": role, "content": content}
-        supabase.table("memory").insert(data).execute()
-    except Exception as e:
-        print(f"⚠️ Erro ao salvar memória: {e}")
-
-def get_chat_history(user_id: str, limit=10):
-    if not supabase: return []
-    try:
-        response = supabase.table("memory")\
-            .select("*")\
-            .eq("user_id", str(user_id))\
-            .order("created_at", desc=True)\
-            .limit(limit)\
-            .execute()
+        if file_path:
+            audio_file = genai.upload_file(file_path)
+            inputs.append(audio_file)
         
-        formatted_history = []
-        for msg in response.data[::-1]:
-            formatted_history.append({
-                "role": "user" if msg["role"] == "user" else "model",
-                "parts": [msg["content"]]
-            })
-        return formatted_history
+        if user_text:
+            inputs.append(user_text)
+
+        response = chat.send_message(inputs)
+        text_response = response.text
+        
+        save_message(user_id, "user", user_text or "[Audio]")
+        save_message(user_id, "model", text_response)
+        
+        return text_response
+
     except Exception as e:
-        return []
+        print(f"❌ [ERRO EXECUÇÃO]: {e}")
+        return f"Erro técnico durante a resposta: {e}"
