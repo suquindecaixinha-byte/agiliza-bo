@@ -1,90 +1,75 @@
-import google.generativeai as genai
-from tools import create_calendar_event, create_google_doc
-from memory import save_message, get_chat_history
 import os
-import datetime
+from supabase import create_client, Client
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # --- CONFIGURAÇÃO ---
-api_key = os.getenv("GOOGLE_API_KEY")
-if not api_key:
-    print("❌ ERRO: Chave do Google não encontrada no brain.py")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-genai.configure(api_key=api_key)
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("❌ ERRO: Chaves do Supabase não encontradas no .env")
 
-tools_config = [create_calendar_event, create_google_doc]
+try:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception as e:
+    print(f"❌ Erro fatal ao conectar no Supabase: {e}")
+    supabase = None
 
-# --- INJETANDO A DATA ATUAL NO CÉREBRO ---
-# A IA precisa saber que dia é hoje para calcular "amanhã" ou "quinta-feira"
-agora = datetime.datetime.now()
-data_hoje = agora.strftime("%Y-%m-%d") # Ex: 2024-11-27
-hora_atual = agora.strftime("%H:%M")   # Ex: 14:30
-dia_semana = agora.strftime("%A")      # Ex: Wednesday
-
-SYSTEM_PROMPT = f"""
-Você é a Agiliza, uma assistente executiva eficiente.
-
-CONTEXTO TEMPORAL (MUITO IMPORTANTE):
-- Hoje é: {data_hoje} ({dia_semana})
-- Hora atual: {hora_atual}
-
-SEUS PODERES:
-1. Gerenciar Agenda (create_calendar_event).
-2. Criar Relatórios/Docs (create_google_doc).
-3. Lembrar de tudo (Memória).
-
-REGRAS DE FORMATAÇÃO CRÍTICAS:
-- Ao chamar 'create_calendar_event', o campo 'start_datetime' DEVE ser no formato ISO 8601 COMPLETO: YYYY-MM-DDTHH:MM:SS.
-- Exemplo: Para hoje às 15h, envie '{data_hoje}T15:00:00'.
-- NUNCA envie apenas a hora (ex: '15:00' causará erro).
-
-REGRAS GERAIS:
-- Sempre verifique o histórico da conversa antes de responder.
-- Se o usuário pedir um resumo de reunião, crie um Google Doc.
-- Seja proativa e breve.
-- Não use emojis.
-- Tenha um tom de voz professoral
-"""
-
-model = genai.GenerativeModel(
-    model_name='gemini-2.0-flash-001',
-    tools=tools_config,
-    system_instruction=SYSTEM_PROMPT
-)
-
-def process_ai_request(user_text: str, user_id: str, file_path=None):
-    print(f"🧠 [CÉREBRO] Usuário {user_id} disse: {user_text}")
-    
-    history = get_chat_history(user_id, limit=10)
-    
-    # Inicia o chat com histórico
-    chat = model.start_chat(history=history, enable_automatic_function_calling=True)
-    
-    inputs = []
-    
-    if file_path:
-        print(f"🎤 Processando áudio: {file_path}")
-        audio_file = genai.upload_file(file_path)
-        inputs.append(audio_file)
-        inputs.append("Transcreva ou execute a ordem dada neste áudio. Se for uma reunião, faça um resumo.")
-    
-    if user_text:
-        inputs.append(user_text)
-
+# --- FUNÇÕES DE USUÁRIO (NOVO) ---
+def get_user_email(telegram_id: str):
+    """Busca o email do usuário pelo ID do Telegram."""
+    if not supabase: return None
     try:
-        response = chat.send_message(inputs)
-        text_response = response.text
+        # Cria a tabela users se não existir (apenas segurança)
+        # Idealmente rode o SQL no painel do Supabase:
+        # create table users (telegram_id text primary key, email text);
         
-        # Salva na Memória
-        content_to_save = user_text if user_text else "[Arquivo de Áudio Enviado]"
-        save_message(user_id, "user", content_to_save)
-        save_message(user_id, "model", text_response)
-        
-        return text_response
-
+        response = supabase.table("users").select("email").eq("telegram_id", str(telegram_id)).execute()
+        if response.data and len(response.data) > 0:
+            return response.data[0]['email']
+        return None
     except Exception as e:
-        print(f"❌ [ERRO CÉREBRO]: {e}")
-        # Retorna mensagem amigável ao usuário em vez de quebrar
-        return f"Tive um problema técnico com a data. Tente dizer 'Agende para o dia {data_hoje} às 15h'."
+        print(f"⚠️ Erro ao buscar usuário: {e}")
+        return None
+
+def register_user(telegram_id: str, email: str):
+    """Salva um novo usuário no banco."""
+    if not supabase: return False
+    try:
+        data = {"telegram_id": str(telegram_id), "email": email.strip().lower()}
+        supabase.table("users").upsert(data).execute()
+        return True
+    except Exception as e:
+        print(f"⚠️ Erro ao registrar usuário: {e}")
+        return False
+
+# --- FUNÇÕES DE MEMÓRIA (MANTIDAS) ---
+def save_message(user_id: str, role: str, content: str):
+    if not supabase: return
+    try:
+        data = {"user_id": str(user_id), "role": role, "content": content}
+        supabase.table("memory").insert(data).execute()
+    except Exception as e:
+        print(f"⚠️ Erro ao salvar memória: {e}")
+
+def get_chat_history(user_id: str, limit=10):
+    if not supabase: return []
+    try:
+        response = supabase.table("memory")\
+            .select("*")\
+            .eq("user_id", str(user_id))\
+            .order("created_at", desc=True)\
+            .limit(limit)\
+            .execute()
+        
+        formatted_history = []
+        for msg in response.data[::-1]:
+            formatted_history.append({
+                "role": "user" if msg["role"] == "user" else "model",
+                "parts": [msg["content"]]
+            })
+        return formatted_history
+    except Exception as e:
+        return []
