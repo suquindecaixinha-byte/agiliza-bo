@@ -4,57 +4,36 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# --- CONFIGURAÇÃO ---
+# BUSCA AS CHAVES DAS VARIÁVEIS DE AMBIENTE (MAIS SEGURO)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    print("❌ ERRO: Chaves do Supabase não encontradas no .env")
-
-try:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
-    print(f"❌ Erro fatal ao conectar no Supabase: {e}")
+    print("❌ ERRO: Variáveis SUPABASE_URL ou SUPABASE_KEY não encontradas.")
     supabase = None
-
-# --- FUNÇÕES DE USUÁRIO (NOVO) ---
-def get_user_email(telegram_id: str):
-    """Busca o email do usuário pelo ID do Telegram."""
-    if not supabase: return None
+else:
     try:
-        # Cria a tabela users se não existir (apenas segurança)
-        # Idealmente rode o SQL no painel do Supabase:
-        # create table users (telegram_id text primary key, email text);
-        
-        response = supabase.table("users").select("email").eq("telegram_id", str(telegram_id)).execute()
-        if response.data and len(response.data) > 0:
-            return response.data[0]['email']
-        return None
+        supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
     except Exception as e:
-        print(f"⚠️ Erro ao buscar usuário: {e}")
-        return None
+        print(f"❌ Erro fatal ao conectar no Supabase: {e}")
+        supabase = None
 
-def register_user(telegram_id: str, email: str):
-    """Salva um novo usuário no banco."""
-    if not supabase: return False
-    try:
-        data = {"telegram_id": str(telegram_id), "email": email.strip().lower()}
-        supabase.table("users").upsert(data).execute()
-        return True
-    except Exception as e:
-        print(f"⚠️ Erro ao registrar usuário: {e}")
-        return False
-
-# --- FUNÇÕES DE MEMÓRIA (MANTIDAS) ---
 def save_message(user_id: str, role: str, content: str):
+    """Salva uma mensagem no banco."""
     if not supabase: return
     try:
-        data = {"user_id": str(user_id), "role": role, "content": content}
+        data = {
+            "user_id": str(user_id),
+            "role": role, 
+            "content": content
+        }
         supabase.table("memory").insert(data).execute()
+        print(f"💾 [MEMÓRIA] Mensagem salva ({role})")
     except Exception as e:
         print(f"⚠️ Erro ao salvar memória: {e}")
 
 def get_chat_history(user_id: str, limit=10):
+    """Busca as últimas mensagens."""
     if not supabase: return []
     try:
         response = supabase.table("memory")\
@@ -64,12 +43,16 @@ def get_chat_history(user_id: str, limit=10):
             .limit(limit)\
             .execute()
         
+        messages = response.data[::-1]
+        
         formatted_history = []
-        for msg in response.data[::-1]:
+        for msg in messages:
             formatted_history.append({
                 "role": "user" if msg["role"] == "user" else "model",
                 "parts": [msg["content"]]
             })
+            
         return formatted_history
     except Exception as e:
+        print(f"⚠️ Erro ao buscar memória: {e}")
         return []

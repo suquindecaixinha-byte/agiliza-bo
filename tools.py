@@ -1,3 +1,4 @@
+# tools.py CORRIGIDO
 import datetime
 import os
 import json
@@ -13,77 +14,66 @@ SCOPES = [
     'https://www.googleapis.com/auth/drive'
 ]
 
-# --- MODIFICAÇÃO DE SEGURANÇA ---
-# Tenta pegar da variável de ambiente (Nuvem). Se não tiver, tenta arquivo (Local).
-json_credentials = os.getenv("GOOGLE_CREDENTIALS_JSON")
-
 def get_creds():
+    """
+    Obtém credenciais:
+    1. Tenta via Variável de Ambiente (Render/Nuvem).
+    2. Se falhar, tenta via arquivo local (Teste no PC).
+    """
+    json_credentials = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    
     if json_credentials:
-        # Se estamos na nuvem (Render), lê da variável
+        # Nuvem
         creds_dict = json.loads(json_credentials)
         return service_account.Credentials.from_service_account_info(
             creds_dict, scopes=SCOPES)
     else:
-        # Se estamos no PC local, lê do arquivo
-        return service_account.Credentials.from_service_account_file(
-            'credentials.json', scopes=SCOPES)
+        # Local
+        if os.path.exists('credentials.json'):
+            return service_account.Credentials.from_service_account_file(
+                'credentials.json', scopes=SCOPES)
+        else:
+            raise FileNotFoundError("Credenciais não encontradas (Nem ENV, nem arquivo).")
 
-# --------------------------------
-# --- ATUALIZAÇÃO: Adicionamos o escopo 'drive' para poder compartilhar arquivos ---
-SCOPES = [
-    'https://www.googleapis.com/auth/calendar', 
-    'https://www.googleapis.com/auth/documents',
-    'https://www.googleapis.com/auth/drive'
-]
-
-SERVICE_ACCOUNT_FILE = 'credentials.json'
-
-# --- COLOQUE SEU EMAIL AQUI (Entre aspas) ---
-def create_calendar_event(summary: str, start_datetime: str, user_email: str): # <--- Recebe o email
-    ...
-    # Usa o email que veio do cérebro, não o fixo
-    service.events().insert(calendarId=user_email, body=event_body).execute()
-# --------------------------------------------
-
-def get_creds():
-    return service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-
-def create_calendar_event(summary: str, start_datetime: str, end_datetime: str = None):
-    """Cria evento na agenda (sem convite para evitar erro 403)."""
-    print(f"🔧 [TOOLS] Agendando: '{summary}'")
-    creds = get_creds()
-    service = build('calendar', 'v3', credentials=creds)
-    
-    if not end_datetime:
-        dt = datetime.datetime.fromisoformat(start_datetime)
-        end_datetime = (dt + datetime.timedelta(hours=1)).isoformat()
-
-    event_body = {
-        'summary': summary,
-        'start': {'dateTime': start_datetime, 'timeZone': 'America/Sao_Paulo'},
-        'end': {'dateTime': end_datetime, 'timeZone': 'America/Sao_Paulo'}
-    }
-
+def create_calendar_event(summary: str, start_datetime: str, user_email: str, end_datetime: str = None):
+    """
+    Cria evento na agenda do usuário (via Service Account).
+    O user_email é obrigatório para saber em qual agenda salvar.
+    """
+    print(f"🔧 [TOOLS] Agendando: '{summary}' para {user_email}")
     try:
-        event = service.events().insert(calendarId=ID_DA_SUA_AGENDA, body=event_body).execute()
+        creds = get_creds()
+        service = build('calendar', 'v3', credentials=creds)
+        
+        if not end_datetime:
+            dt = datetime.datetime.fromisoformat(start_datetime)
+            end_datetime = (dt + datetime.timedelta(hours=1)).isoformat()
+
+        event_body = {
+            'summary': summary,
+            'start': {'dateTime': start_datetime, 'timeZone': 'America/Sao_Paulo'},
+            'end': {'dateTime': end_datetime, 'timeZone': 'America/Sao_Paulo'}
+        }
+
+        # Usa o e-mail do usuário como calendarId (funciona se ele compartilhou a agenda com o robô)
+        event = service.events().insert(calendarId=user_email, body=event_body).execute()
         link = event.get('htmlLink')
         print(f"✅ [TOOLS] Agenda Sucesso: {link}")
-        return f"Agendado! Link: {link}"
+        return f"Agendado com sucesso! Link: {link}"
+        
     except Exception as e:
         print(f"❌ [TOOLS] Erro Agenda: {e}")
-        return f"Erro ao agendar: {str(e)}"
+        return f"Erro ao agendar. Verifique se o usuário {user_email} compartilhou a agenda com o e-mail do robô (client_email). Detalhe: {str(e)}"
 
-# --- Ferramenta 2: Criar Doc + COMPARTILHAR (A Correção) ---
 def create_google_doc(title: str, content: str):
-    """Cria Doc e compartilha com o usuário."""
+    """Cria Doc e deixa público para leitura (quem tem o link)."""
     print(f"🔧 [TOOLS] Criando Doc: '{title}'")
     
-    creds = get_creds()
-    service = build('docs', 'v1', credentials=creds)
-    drive_service = build('drive', 'v3', credentials=creds) # Necessário para permissões
-    
     try:
+        creds = get_creds()
+        service = build('docs', 'v1', credentials=creds)
+        drive_service = build('drive', 'v3', credentials=creds)
+        
         # 1. Cria o Doc
         doc = service.documents().create(body={'title': title}).execute()
         doc_id = doc.get('documentId')
@@ -92,27 +82,7 @@ def create_google_doc(title: str, content: str):
         requests = [{'insertText': {'location': {'index': 1}, 'text': content}}]
         service.documents().batchUpdate(documentId=doc_id, body={'requests': requests}).execute()
         
-        # 3. O PULO DO GATO: Compartilha o arquivo com VOCÊ (SEM E-MAIL)
-       def create_google_doc(title: str, content: str):
-    """Cria Doc e deixa público para quem tem o link (evita erro de permissão)."""
-    print(f"🔧 [TOOLS] Criando Doc: '{title}'")
-    
-    creds = get_creds()
-    service = build('docs', 'v1', credentials=creds)
-    drive_service = build('drive', 'v3', credentials=creds)
-    
-    try:
-        # 1. Cria o Doc
-        doc = service.documents().create(body={'title': title}).execute()
-        doc_id = doc.get('documentId')
-
-        # 2. Insere o conteúdo
-        requests = [{'insertText': {'location': {'index': 1}, 'text': content}}]
-        service.documents().batchUpdate(documentId=doc_id, body={'requests': requests}).execute()
-        
-        # 3. PERMISSÃO PÚBLICA (Qualquer um com o link pode ler)
-        # Isso resolve o erro "Arquivo não existe"
-        print(f"🔧 [TOOLS] Liberando link público...")
+        # 3. Permissão de Leitura para Todos (Link Público)
         drive_service.permissions().create(
             fileId=doc_id,
             body={'type': 'anyone', 'role': 'reader'},
@@ -121,13 +91,8 @@ def create_google_doc(title: str, content: str):
 
         link = f"https://docs.google.com/document/d/{doc_id}"
         print(f"✅ [TOOLS] Doc Finalizado: {link}")
-        return f"Relatório criado: {link}"
+        return f"Documento criado: {link}"
 
     except Exception as e:
         print(f"❌ [TOOLS] Erro Doc: {e}")
         return f"Erro ao criar documento: {str(e)}"
-
-available_tools = {
-    'create_calendar_event': create_calendar_event,
-    'create_google_doc': create_google_doc
-}

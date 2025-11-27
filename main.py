@@ -80,23 +80,4 @@ async def telegram_webhook(request: Request):
         if temp_file and os.path.exists(temp_file):
             os.remove(temp_file)
 
-
     return {"status": "ok"}
-
-# (Pseudocódigo da lógica nova)
-def verificar_usuario(chat_id, texto_usuario):
-    # 1. Busca no Supabase se esse chat_id já existe na tabela 'users'
-    usuario = supabase.table("users").select("email").eq("telegram_id", str(chat_id)).execute()
-    
-    # 2. Se NÃO existir (Usuário Novo):
-    if not usuario.data:
-        # Verifica se o texto parece um email
-        if "@" in texto_usuario and "." in texto_usuario:
-            # Salva o novo usuário!
-            supabase.table("users").insert({"telegram_id": str(chat_id), "email": texto_usuario}).execute()
-            return f"Cadastro realizado! Agora vá na sua Agenda Google e compartilhe o acesso com o email do meu robô: {EMAIL_DO_ROBO_SERVICE_ACCOUNT}"
-        else:
-            return "Olá! Para começar, preciso saber qual é o seu e-mail do Google Agenda. Por favor, digite apenas o e-mail."
-
-    # 3. Se JÁ existir:
-    return "ok" # Deixa a IA processar normal
