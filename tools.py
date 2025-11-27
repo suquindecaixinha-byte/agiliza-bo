@@ -1,19 +1,34 @@
 import datetime
+import os
+import json
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from dotenv import load_dotenv
 
-# --- ATUALIZAÇÃO: Adicionamos o escopo 'drive' para poder compartilhar arquivos ---
+load_dotenv()
+
 SCOPES = [
     'https://www.googleapis.com/auth/calendar', 
     'https://www.googleapis.com/auth/documents',
     'https://www.googleapis.com/auth/drive'
 ]
 
-SERVICE_ACCOUNT_FILE = 'credentials.json'
+# --- MODIFICAÇÃO DE SEGURANÇA ---
+# Tenta pegar da variável de ambiente (Nuvem). Se não tiver, tenta arquivo (Local).
+json_credentials = os.getenv("GOOGLE_CREDENTIALS_JSON")
 
-# --- COLOQUE SEU EMAIL AQUI (Entre aspas) ---
-ID_DA_SUA_AGENDA = "deivlin.vale@gmail.com" 
-# --------------------------------------------
+def get_creds():
+    if json_credentials:
+        # Se estamos na nuvem (Render), lê da variável
+        creds_dict = json.loads(json_credentials)
+        return service_account.Credentials.from_service_account_info(
+            creds_dict, scopes=SCOPES)
+    else:
+        # Se estamos no PC local, lê do arquivo
+        return service_account.Credentials.from_service_account_file(
+            'credentials.json', scopes=SCOPES)
+
+# --------------------------------
 
 def get_creds():
     return service_account.Credentials.from_service_account_file(
@@ -77,4 +92,5 @@ def create_google_doc(title: str, content: str):
 
     except Exception as e:
         print(f"❌ [TOOLS] Erro Doc: {e}")
+
         return f"Erro ao criar documento: {str(e)}"
