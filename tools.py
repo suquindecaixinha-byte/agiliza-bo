@@ -26,25 +26,65 @@ def get_service(user_id, api_name, version):
 
     return build(api_name, version, credentials=creds)
 
-# --- FERRAMENTA 1: AGENDA ---
-def create_calendar_event(summary: str, start_datetime: str, user_id: str, end_datetime: str = None):
+def list_calendar_events(user_id: str, date_str: str = None):
     """
-    Cria um evento na agenda PRINCIPAL do usuário autenticado.
-    Note que agora pedimos 'user_id' em vez de 'user_email'.
+    Lista os eventos de um dia específico para ver o que está ocupado.
+    Se date_str não for informado, usa hoje. Formato date_str: 'YYYY-MM-DD'.
     """
-    print(f"🔧 [TOOLS] Agendando '{summary}' para usuário ID: {user_id}")
-    
+    print(f"🔧 [TOOLS] Listando eventos para {user_id} na data {date_str}")
     service = get_service(user_id, 'calendar', 'v3')
-    
-    if not service:
-        return "Erro: Você não está conectado à sua conta Google. Por favor, faça o login clicando no link de conexão."
+    if not service: return "Erro: Usuário não conectado."
+
+    if not date_str:
+        date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        
+    try:
+        # Define o intervalo do dia inteiro (00:00 até 23:59:59)
+        start_of_day = f"{date_str}T00:00:00-03:00" # Fuso horário Brasil
+        end_of_day = f"{date_str}T23:59:59-03:00"
+
+        events_result = service.events().list(
+            calendarId='primary', 
+            timeMin=start_of_day,
+            timeMax=end_of_day,
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+        events = events_result.get('items', [])
+
+        if not events:
+            return f"Agenda livre para o dia {date_str}."
+
+        agenda_str = f"Agenda para {date_str}:\n"
+        for event in events:
+            start = event['start'].get('dateTime', event['start'].get('date'))
+            # Pega só a hora (HH:MM) para simplificar pro Gemini
+            start_time = start[11:16] if 'T' in start else "Dia todo"
+            agenda_str += f"- {start_time}: {event['summary']}\n"
+            
+        return agenda_str
+
+    except Exception as e:
+        print(f"❌ [TOOLS] Erro ao listar: {e}")
+        return f"Erro ao ler agenda: {str(e)}"
+
+
+# --- FERRAMENTA ATUALIZADA: CRIAR EVENTO COM CONVIDADOS ---
+def create_calendar_event(summary: str, start_datetime: str, user_id: str, end_datetime: str = None, attendees_emails: list[str] = None):
+    """
+    Cria evento na agenda principal. 
+    Agora aceita uma lista opcional de emails para convidar (attendees_emails).
+    """
+    print(f"🔧 [TOOLS] Agendando '{summary}' para {user_id}. Convidados: {attendees_emails}")
+    service = get_service(user_id, 'calendar', 'v3')
+    if not service: return "Erro: Usuário não conectado."
 
     if not end_datetime:
         try:
             dt = datetime.datetime.fromisoformat(start_datetime)
             end_datetime = (dt + datetime.timedelta(hours=1)).isoformat()
         except ValueError:
-            return "Erro: Formato de data inválido. O cérebro enviou algo errado."
+            return "Erro: Formato de data inválido."
 
     event_body = {
         'summary': summary,
@@ -52,17 +92,26 @@ def create_calendar_event(summary: str, start_datetime: str, user_id: str, end_d
         'end': {'dateTime': end_datetime, 'timeZone': 'America/Sao_Paulo'}
     }
 
+    # --- NOVIDADE: ADICIONA CONVIDADOS ---
+    if attendees_emails:
+        attendees_list = [{'email': email.strip()} for email in attendees_emails]
+        event_body['attendees'] = attendees_list
+    # -------------------------------------
+
     try:
-        # MUDANÇA CRUCIAL: calendarId='primary'
-        # Como estamos logados COMO o usuário, 'primary' é a agenda dele.
         event = service.events().insert(calendarId='primary', body=event_body).execute()
         link = event.get('htmlLink')
         print(f"✅ [TOOLS] Agenda Sucesso: {link}")
-        return f"Agendado com sucesso! Link: {link}"
+        
+        invite_text = ""
+        if attendees_emails:
+            invite_text = f" Convites enviados para: {', '.join(attendees_emails)}."
+            
+        return f"Agendado com sucesso!{invite_text} Link: {link}"
         
     except Exception as e:
         print(f"❌ [TOOLS] Erro Agenda: {e}")
-        return f"O Google recusou o agendamento. Detalhe: {str(e)}"
+        return f"Erro do Google: {str(e)}"
 
 # --- FERRAMENTA 2: GOOGLE DOCS ---
 def create_google_doc(title: str, content: str, user_id: str):
