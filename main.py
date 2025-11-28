@@ -1,3 +1,5 @@
+from brain import process_ai_request
+from memory import register_user 
 import os
 import httpx
 from fastapi import FastAPI, Request
@@ -116,5 +118,6 @@ async def telegram_webhook(request: Request):
     finally:
         if temp_file and os.path.exists(temp_file):
             os.remove(temp_file)
+
 
     return {"status": "ok"}
