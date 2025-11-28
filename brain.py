@@ -14,32 +14,37 @@ try:
     api_key = os.getenv("GOOGLE_API_KEY")
     genai.configure(api_key=api_key)
     
-    # Lista de ferramentas
     tools_config = [create_calendar_event, create_google_doc, list_calendar_events]
     
     agora = datetime.datetime.now()
     data_hoje = agora.strftime("%Y-%m-%d")
     
-    # --- NOVAS REGRAS IMPLEMENTADAS NO PROMPT ---
+    # --- PROMPT PARA HTML (MUITO MAIS SEGURO) ---
     SYSTEM_PROMPT = f"""
     Você é a Agiliza. Hoje: {agora.strftime("%Y-%m-%d %H:%M")}.
     Seu foco: Ajudar o usuário gerenciando Agenda e Docs.
     
     Poderes Disponíveis:
-    1. create_calendar_event: Agendar (pode incluir lista de emails de convidados).
-    2. list_calendar_events: Ver o que está ocupado num dia para achar horários livres.
+    1. create_calendar_event: Agendar.
+    2. list_calendar_events: Ver horários.
     3. create_google_doc: Criar documentos.
 
-    DIRETRIZES DE COMPORTAMENTO (RÍGIDAS):
-    1. Regra Email: Use sempre o e-mail do usuário fornecido no contexto para qualquer ação.
-    2. Regra Tom: Adote um tom estritamente professoral. Seja educado, didático, formal, mas acessível.
-    3. Regra Emojis: Não utilize emojis gráficos (como 👍, 📅, 🤖). O uso de emoticons de texto simples (como :) ) é permitido com parcimônia.
-    4. Regra Áudio: Ocasionalmente, lembre o usuário da possibilidade de envio de áudio. Exemplo: "Olha, se estiver corrido por aí, pode me mandar um áudio também! :)"
-    5. Regra Formatação: Utilize quebras de linha frequentes para garantir a plena visualização das informações. Use **negrito** e *itálico* estrategicamente para destacar termos cruciais.
-    6. Regra de Falha: Caso uma função solicitada não esteja disponível ou falhe, peça desculpas formalmente e instrua o usuário a contactar o administrador da IA.
+    DIRETRIZES TÉCNICAS (FORMATO HTML):
+    O Telegram espera formatação em HTML. Não use Markdown (* ou #).
+    
+    1. Negrito: Use a tag <b>exemplo</b>.
+    2. Links: Use <a href="url">texto</a>.
+    3. Itálico: Use <i>exemplo</i>.
+    4. NÃO use tags complexas como <ul>, <li>, <p> ou <br>. Use apenas quebras de linha normais.
+    
+    DIRETRIZES DE COMPORTAMENTO:
+    1. Regra Email: Use sempre o e-mail do usuário ({get_user_email} ou contexto).
+    2. Regra Tom: Professoral, educado, didático.
+    3. Regra Emojis: Não use emojis gráficos.
+    4. Regra Áudio: Lembre que pode mandar áudio.
+    5. Regra Formatação: Use quebras de linha para clareza.
 
-    Regra Técnica Agenda: Use sempre o formato ISO '{data_hoje}T15:00:00'.
-    Sempre verifique disponibilidade (list_calendar_events) antes de agendar.
+    Regra Técnica Agenda: Use formato ISO '{data_hoje}T15:00:00'.
     """
     
     model = genai.GenerativeModel(
@@ -55,38 +60,34 @@ except Exception as e:
 def process_ai_request(user_text: str, user_id: str, file_path=None):
     print(f"🧠 [CÉREBRO] User {user_id}: {user_text}")
     
-    # --- CHECAGEM DE LOGIN (OAUTH2) ---
     creds = load_user_credentials(user_id)
     
-    # Se NÃO tem credenciais (ou se mandou /start), mostra a Apresentação + Login
     if not creds or not creds.valid or user_text == "/start":
-        
         if not get_user_email(user_id):
             register_user(user_id, "pendente_login")
 
         render_url = os.getenv("RENDER_EXTERNAL_URL") 
         if not render_url:
-            return "Erro Técnico: Variável RENDER_EXTERNAL_URL não configurada. Contacte o administrador."
+            return "Erro Técnico: Variável RENDER_EXTERNAL_URL não configurada."
             
         link_login = f"{render_url}/auth/login?state={user_id}"
         
-        # --- MENSAGEM DE BOAS-VINDAS (ADEQUADA AO NOVO TOM SEM EMOJIS) ---
+        # Mensagem formatada manualmente em HTML
         mensagem_boas_vindas = (
-            "**Agiliza IA: Sua rotina no piloto automático**\n\n"
-            "Seja bem-vindo(a).\n\n"
-            "Idealizada por **Deivlin Vale**, esta plataforma foi desenvolvida com um propósito claro: "
+            "<b>Agiliza IA: Sua rotina no piloto automático</b>\n\n"
+            "Prezado(a) usuário(a), seja bem-vindo(a).\n\n"
+            "Idealizada por <b>Deivlin Vale</b>, esta plataforma foi desenvolvida com um propósito claro: "
             "eliminar o atrito entre você e a sua produtividade.\n\n"
-            "**Como posso auxiliá-lo de fato?**\n\n"
-            "* **Agenda Blindada:** Agende reuniões e encontre horários livres com apenas uma frase.\n"
-            "* **Da ideia ao documento:** Envie um áudio e eu transformarei sua fala em um documento organizado no seu Drive.\n"
-            "* **Segurança:** Seus dados pertencem a você. Utilizo a conexão oficial do Google para garantir a privacidade.\n\n"
-            "Menos burocracia, mais realização. **Vamos iniciar?**\n\n"
-            "Por favor, toque no link abaixo para conectar sua conta Google:\n"
-            f"[CONECTAR AGORA]({link_login})"
+            "<b>Como posso auxiliá-lo de fato?</b>\n\n"
+            "• <b>Agenda Blindada:</b> Agende reuniões e encontre horários livres.\n"
+            "• <b>Da Ideia ao Documento:</b> Envie um áudio e eu transformarei sua fala em um Doc.\n"
+            "• <b>Segurança:</b> Utilizo a conexão oficial do Google.\n\n"
+            "Menos burocracia, mais realização. <b>Podemos iniciar?</b>\n\n"
+            "Por favor, acesse o link abaixo para conectar sua conta Google:\n"
+            f"<a href='{link_login}'>CONECTAR AGORA</a>"
         )
         return mensagem_boas_vindas
     
-    # --- SE JÁ ESTÁ LOGADO, PROCESSA O PEDIDO ---
     try:
         history = get_chat_history(user_id)
         user_email = get_user_email(user_id)
@@ -109,4 +110,4 @@ def process_ai_request(user_text: str, user_id: str, file_path=None):
 
     except Exception as e:
         print(f"❌ Erro Execução: {e}")
-        return "Peço desculpas, mas ocorreu um erro técnico ao processar seu pedido. Por favor, contacte o administrador da IA."
+        return "Peço desculpas, erro técnico. Contacte o administrador."
