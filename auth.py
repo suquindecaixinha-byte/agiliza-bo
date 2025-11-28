@@ -29,7 +29,8 @@ SCOPES = [
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/documents',
     'https://www.googleapis.com/auth/drive',
-    'https://www.googleapis.com/auth/userinfo.email' # <--- O ESCOPO QUE FALTAVA
+    'https://www.googleapis.com/auth/userinfo.email'
+    'openid'
 ]
 
 def get_google_auth_flow():
@@ -86,3 +87,4 @@ def load_user_credentials(user_id: str):
     except Exception as e:
         print(f"Erro ao carregar credenciais: {e}")
         return None
+
