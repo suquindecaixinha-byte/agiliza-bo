@@ -2,7 +2,7 @@ import os
 import json
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
-from supabase import create_client
+from supabase import create_client, Client
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,49 +10,40 @@ load_dotenv()
 # Configuração do Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL else None
+
+# Blindagem contra erro de conexão no Supabase
+supabase = None
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    except Exception as e:
+        print(f"Erro Supabase Auth: {e}")
 
 # Configuração do OAuth
-# ATENÇÃO: A URL de callback deve ser EXATAMENTE igual à cadastrada no Google Cloud
-RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "http://localhost:10000") # Render define essa var automaticamente
+# ATENÇÃO: A URL deve ser exata (sem barra no final se configurou assim no Google)
+RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "http://localhost:10000") 
 REDIRECT_URI = f"{RENDER_URL}/auth/callback"
 
+# --- A CORREÇÃO ESTÁ AQUI EMBAIXO ---
 SCOPES = [
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/documents',
-    'https://www.googleapis.com/auth/drive'
+    'https://www.googleapis.com/auth/drive',
+    'https://www.googleapis.com/auth/userinfo.email' # <--- O ESCOPO QUE FALTAVA
 ]
-# No arquivo auth.py
 
 def get_google_auth_flow():
+    """Cria o fluxo de autenticação."""
     client_id = os.getenv("GOOGLE_CLIENT_ID")
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-
-    # --- DEBUG (O Dedo-Duro) ---
-    # Isso vai mostrar no log do Render se ele está lendo ou não
-    # Ele mostra só os 5 primeiros caracteres para não vazar a senha toda
-    print(f"🕵️ DEBUG AUTH: ID lido? {client_id[:5]}... | Secret lido? {client_secret[:5]}...")
     
     if not client_id or not client_secret:
-        raise ValueError("ERRO: As variáveis GOOGLE_CLIENT_ID ou SECRET estão vazias/None!")
-    # ---------------------------
+        raise ValueError("ERRO: Variáveis GOOGLE_CLIENT_ID ou SECRET não configuradas.")
 
     client_config = {
         "web": {
             "client_id": client_id,
             "client_secret": client_secret,
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-        }
-    }
-    # ... resto do código igual ...
-
-def get_google_auth_flow():
-    """Cria o fluxo de autenticação com as credenciais do ambiente."""
-    client_config = {
-        "web": {
-            "client_id": os.getenv("GOOGLE_CLIENT_ID"),
-            "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
         }
@@ -69,19 +60,19 @@ def save_user_credentials(user_id: str, credentials):
     """Salva as credenciais (token) do usuário no Supabase."""
     if not supabase: return False
     
-    # Transforma o objeto Credentials em JSON string para salvar no banco
     creds_json = credentials.to_json()
     
     try:
-        # Atualiza o usuário existente com as novas credenciais
-        supabase.table("users").upsert({"credentials_json": creds_json}).eq("user_id", str(user_id)).execute()
+        # Usamos upsert para garantir que crie ou atualize
+        # Nota: Aqui salvamos apenas o token. O email salvamos no main.py via register_user
+        supabase.table("users").update({"credentials_json": creds_json}).eq("user_id", str(user_id)).execute()
         return True
     except Exception as e:
         print(f"Erro ao salvar credenciais: {e}")
         return False
 
 def load_user_credentials(user_id: str):
-    """Recupera as credenciais do usuário do banco e renova se necessário."""
+    """Recupera as credenciais do usuário do banco."""
     if not supabase: return None
     
     try:
@@ -94,5 +85,4 @@ def load_user_credentials(user_id: str):
         return creds
     except Exception as e:
         print(f"Erro ao carregar credenciais: {e}")
-
         return None
