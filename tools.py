@@ -1,109 +1,98 @@
-# tools.py CORRIGIDO
 import datetime
-import os
-import json
-from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from dotenv import load_dotenv
+from google.auth.transport.requests import Request
+from auth import load_user_credentials  # Importamos a função do arquivo auth.py
 
-load_dotenv()
-
-SCOPES = [
-    'https://www.googleapis.com/auth/calendar', 
-    'https://www.googleapis.com/auth/documents',
-    'https://www.googleapis.com/auth/drive'
-]
-
-def get_creds():
+# --- FUNÇÃO AUXILIAR (Para não repetir código) ---
+def get_service(user_id, api_name, version):
     """
-    Obtém credenciais:
-    1. Tenta via Variável de Ambiente (Render/Nuvem).
-    2. Se falhar, tenta via arquivo local (Teste no PC).
+    Recupera as credenciais do usuário, renova o token se necessário
+    e retorna o cliente da API pronto para uso.
     """
-    json_credentials = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    creds = load_user_credentials(user_id)
     
-    if json_credentials:
-        # Nuvem
-        creds_dict = json.loads(json_credentials)
-        return service_account.Credentials.from_service_account_info(
-            creds_dict, scopes=SCOPES)
-    else:
-        # Local
-        if os.path.exists('credentials.json'):
-            return service_account.Credentials.from_service_account_file(
-                'credentials.json', scopes=SCOPES)
-        else:
-            raise FileNotFoundError("Credenciais não encontradas (Nem ENV, nem arquivo).")
+    if not creds:
+        print(f"⚠️ [TOOLS] Usuário {user_id} não tem credenciais válidas.")
+        return None
 
-def create_calendar_event(summary: str, start_datetime: str, user_email: str, end_datetime: str = None):
+    # Se o token venceu, tenta renovar automaticamente
+    if creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(Request())
+            print(f"🔄 [TOOLS] Token renovado para o usuário {user_id}")
+        except Exception as e:
+            print(f"❌ [TOOLS] Erro ao renovar token: {e}")
+            return None
+
+    return build(api_name, version, credentials=creds)
+
+# --- FERRAMENTA 1: AGENDA ---
+def create_calendar_event(summary: str, start_datetime: str, user_id: str, end_datetime: str = None):
     """
-    Cria evento na agenda do usuário (via Service Account).
-    O user_email é obrigatório para saber em qual agenda salvar.
+    Cria um evento na agenda PRINCIPAL do usuário autenticado.
+    Note que agora pedimos 'user_id' em vez de 'user_email'.
     """
-    print(f"🔧 [TOOLS] Agendando: '{summary}' para {user_email}")
-    try:
-        creds = get_creds()
-        service = build('calendar', 'v3', credentials=creds)
-        
-        if not end_datetime:
+    print(f"🔧 [TOOLS] Agendando '{summary}' para usuário ID: {user_id}")
+    
+    service = get_service(user_id, 'calendar', 'v3')
+    
+    if not service:
+        return "Erro: Você não está conectado à sua conta Google. Por favor, faça o login clicando no link de conexão."
+
+    if not end_datetime:
+        try:
             dt = datetime.datetime.fromisoformat(start_datetime)
             end_datetime = (dt + datetime.timedelta(hours=1)).isoformat()
+        except ValueError:
+            return "Erro: Formato de data inválido. O cérebro enviou algo errado."
 
-        event_body = {
-            'summary': summary,
-            'start': {'dateTime': start_datetime, 'timeZone': 'America/Sao_Paulo'},
-            'end': {'dateTime': end_datetime, 'timeZone': 'America/Sao_Paulo'}
-        }
+    event_body = {
+        'summary': summary,
+        'start': {'dateTime': start_datetime, 'timeZone': 'America/Sao_Paulo'},
+        'end': {'dateTime': end_datetime, 'timeZone': 'America/Sao_Paulo'}
+    }
 
-        # Usa o e-mail do usuário como calendarId (funciona se ele compartilhou a agenda com o robô)
-        event = service.events().insert(calendarId=user_email, body=event_body).execute()
+    try:
+        # MUDANÇA CRUCIAL: calendarId='primary'
+        # Como estamos logados COMO o usuário, 'primary' é a agenda dele.
+        event = service.events().insert(calendarId='primary', body=event_body).execute()
         link = event.get('htmlLink')
         print(f"✅ [TOOLS] Agenda Sucesso: {link}")
         return f"Agendado com sucesso! Link: {link}"
         
     except Exception as e:
         print(f"❌ [TOOLS] Erro Agenda: {e}")
-        return f"Erro ao agendar. Verifique se o usuário {user_email} compartilhou a agenda com o e-mail do robô (client_email). Detalhe: {str(e)}"
+        return f"O Google recusou o agendamento. Detalhe: {str(e)}"
 
-def create_google_doc(title: str, content: str):
-    """Cria Doc e deixa público para leitura (quem tem o link)."""
-    print(f"🔧 [TOOLS] Criando Doc: '{title}'")
+# --- FERRAMENTA 2: GOOGLE DOCS ---
+def create_google_doc(title: str, content: str, user_id: str):
+    """
+    Cria um Doc DIRETAMENTE no Drive do usuário.
+    Não precisa mais compartilhar link público, pois o dono é o próprio usuário!
+    """
+    print(f"🔧 [TOOLS] Criando Doc '{title}' para usuário ID: {user_id}")
     
+    # Precisamos de dois serviços: Docs (para editar) e Drive (para pegar o link bonito)
+    docs_service = get_service(user_id, 'docs', 'v1')
+    if not docs_service:
+        return "Erro: Falha de autenticação. Usuário não conectado."
+
     try:
-        creds = get_creds()
-        service = build('docs', 'v1', credentials=creds)
-        drive_service = build('drive', 'v3', credentials=creds)
-        
         # 1. Cria o Doc
-        doc = service.documents().create(body={'title': title}).execute()
+        doc = docs_service.documents().create(body={'title': title}).execute()
         doc_id = doc.get('documentId')
 
         # 2. Insere o conteúdo
         requests = [{'insertText': {'location': {'index': 1}, 'text': content}}]
-        service.documents().batchUpdate(documentId=doc_id, body={'requests': requests}).execute()
+        docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': requests}).execute()
         
-        # 3. Permissão de Leitura para Todos (Link Público)
-        drive_service.permissions().create(
-            fileId=doc_id,
-            body={'type': 'anyone', 'role': 'reader'},
-            fields='id'
-        ).execute()
-
+        # MUDANÇA: Não precisamos mais de 'drive_service.permissions'
+        # O arquivo já nasce privado e pertencente ao usuário.
+        
         link = f"https://docs.google.com/document/d/{doc_id}"
         print(f"✅ [TOOLS] Doc Finalizado: {link}")
-        return f"Documento criado: {link}"
+        return f"Documento criado no seu Drive: {link}"
 
     except Exception as e:
         print(f"❌ [TOOLS] Erro Doc: {e}")
-
         return f"Erro ao criar documento: {str(e)}"
-
-# --- Adicione isso no final do arquivo tools.py ---
-
-def get_bot_email():
-    """Retorna o email do robô para ser mostrado ao usuário."""
-    try:
-        creds = get_creds()
-        return creds.service_account_email
-    except:
-        return "[Erro ao obter e-mail do robô]"
