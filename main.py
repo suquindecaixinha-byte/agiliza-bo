@@ -6,7 +6,7 @@ from brain import process_ai_request
 from auth import get_google_auth_flow, save_user_credentials
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
-from memory import register_user # Importação necessária
+from memory import register_user 
 
 load_dotenv()
 
@@ -17,13 +17,13 @@ TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
 # --- FUNÇÕES AUXILIARES TELEGRAM ---
 async def send_telegram_message(chat_id, text):
-    """Envia mensagem de texto de volta para o Telegram usando MarkdownV2."""
+    """Envia mensagem usando HTML (Mais seguro para IA)."""
     async with httpx.AsyncClient() as client:
         await client.post(f"{TELEGRAM_API_URL}/sendMessage", json={
             "chat_id": chat_id,
             "text": text,
-            "parse_mode": "MarkdownV2", # <--- AQUI ESTÁ A MUDANÇA
-            "disable_web_page_preview": True # Evita prévia de links do Google
+            "parse_mode": "HTML", # <--- MUDANÇA PARA HTML
+            "disable_web_page_preview": True 
         })
 
 async def download_telegram_file(file_id):
@@ -42,7 +42,7 @@ async def download_telegram_file(file_id):
 
 @app.get("/")
 async def root():
-    return {"message": "Agiliza Bot (OAuth2 + MarkdownV2) rodando!"}
+    return {"message": "Agiliza Bot (OAuth2 + HTML) rodando!"}
 
 @app.get("/auth/login")
 async def login(state: str):
@@ -70,8 +70,8 @@ async def callback(request: Request):
         save_user_credentials(user_id, creds)
         register_user(user_id, user_email) 
 
-        # Mensagem de sucesso escapada para MarkdownV2
-        msg_sucesso = f"✅ *Conectado como:* {user_email}\nAgora pode me pedir para agendar coisas\!"
+        # Mensagem de sucesso em HTML
+        msg_sucesso = f"✅ <b>Conectado como:</b> {user_email}\nAgora pode me pedir para agendar coisas!"
         await send_telegram_message(user_id, msg_sucesso)
         
         return f"Sucesso! Conectado como {user_email}. Pode fechar esta janela."
@@ -103,8 +103,7 @@ async def telegram_webhook(request: Request):
 
     except Exception as e:
         print(f"❌ Erro no servidor: {e}")
-        # Mensagem de erro simples sem caracteres especiais para não quebrar
-        await send_telegram_message(chat_id, "Tive um erro interno no servidor")
+        await send_telegram_message(chat_id, "Tive um erro interno no servidor.")
     
     finally:
         if temp_file and os.path.exists(temp_file):
