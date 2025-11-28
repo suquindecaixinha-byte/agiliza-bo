@@ -22,6 +22,30 @@ SCOPES = [
     'https://www.googleapis.com/auth/documents',
     'https://www.googleapis.com/auth/drive'
 ]
+# No arquivo auth.py
+
+def get_google_auth_flow():
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+
+    # --- DEBUG (O Dedo-Duro) ---
+    # Isso vai mostrar no log do Render se ele está lendo ou não
+    # Ele mostra só os 5 primeiros caracteres para não vazar a senha toda
+    print(f"🕵️ DEBUG AUTH: ID lido? {client_id[:5]}... | Secret lido? {client_secret[:5]}...")
+    
+    if not client_id or not client_secret:
+        raise ValueError("ERRO: As variáveis GOOGLE_CLIENT_ID ou SECRET estão vazias/None!")
+    # ---------------------------
+
+    client_config = {
+        "web": {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    }
+    # ... resto do código igual ...
 
 def get_google_auth_flow():
     """Cria o fluxo de autenticação com as credenciais do ambiente."""
@@ -70,4 +94,5 @@ def load_user_credentials(user_id: str):
         return creds
     except Exception as e:
         print(f"Erro ao carregar credenciais: {e}")
+
         return None
