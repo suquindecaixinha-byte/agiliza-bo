@@ -1,5 +1,11 @@
 import google.generativeai as genai
-from tools import create_calendar_event, create_google_doc, list_calendar_events
+from tools import (
+    create_calendar_event, list_calendar_events, delete_calendar_event, update_calendar_event,
+    create_google_doc, read_google_doc,
+    search_drive_file,
+    create_task, list_tasks,
+    get_unread_emails, create_email_draft
+)
 from memory import save_message, get_chat_history, get_user_email, register_user
 from auth import load_user_credentials
 import os
@@ -184,3 +190,4 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
     except Exception as e:
         print(f"❌ Erro AI: {e}")
         return "Tive um problema técnico ao processar sua solicitação. Tente novamente."
+
