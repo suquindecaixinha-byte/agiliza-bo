@@ -151,3 +151,10 @@ async def telegram_webhook(request: Request):
             os.remove(temp_file)
 
     return {"status": "ok"}
+
+if user_text == "/reset":
+        from memory import clear_memory
+        clear_memory(str(chat_id))
+        await send_telegram_message(chat_id, "🧹 Memória limpa! Sobre o que quer falar agora?")
+        return {"status": "reset_done"}
+
