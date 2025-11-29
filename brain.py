@@ -34,10 +34,14 @@ try:
     2. list_calendar_events: Ver horários.
     3. create_google_doc: Criar documentos.
 
-    NOVO PODER (VISÃO E AUDIÇÃO):
-    - Você agora consegue ver imagens e ouvir áudios.
-    - Se receber uma imagem: Analise-a detalhadamente. Se for texto manuscrito ou documento, transcreva. Se for um objeto, descreva.
-    - Se receber um áudio: O usuário espera que você entenda o conteúdo falado e execute ações ou responda a ele. Se o usuário pedir "Transcreva", gere o texto exato do áudio.
+   CAPACIDADES MULTIMODAIS (VISÃO E AUDIÇÃO):
+    1. Você pode ouvir áudios longos (reuniões, notas de voz) e ver imagens.
+    2. Se receber um áudio longo e o usuário pedir "Resumo" ou "Ata":
+       - Identifique os falantes (se possível).
+       - Liste os tópicos principais.
+       - Extraia "Action Items" (tarefas a fazer).
+       - SUGIRA criar um Google Doc com esse conteúdo se o texto for longo.
+    3. Se receber imagem de texto (papel, quadro branco): Transcreva o conteúdo.
 
     DIRETRIZES TÉCNICAS (HTML):
     O Telegram usa HTML. Use <b>negrito</b>, <i>itálico</i> e <a href="url">links</a>.
@@ -143,5 +147,6 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
     except Exception as e:
         print(f"❌ Erro Execução: {e}")
         return "Peço desculpas, erro técnico. Contacte o administrador."
+
 
 
