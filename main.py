@@ -19,7 +19,7 @@ TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 async def send_telegram_message(chat_id, text):
     """Envia mensagem com proteção contra falhas de rede."""
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+       async with httpx.AsyncClient(timeout=30.0) as client:
             await client.post(f"{TELEGRAM_API_URL}/sendMessage", json={
                 "chat_id": chat_id,
                 "text": text,
@@ -157,4 +157,5 @@ if user_text == "/reset":
         clear_memory(str(chat_id))
         await send_telegram_message(chat_id, "🧹 Memória limpa! Sobre o que quer falar agora?")
         return {"status": "reset_done"}
+
 
