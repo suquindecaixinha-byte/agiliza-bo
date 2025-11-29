@@ -26,7 +26,12 @@ try:
         genai.configure(api_key=api_key)
         
         # Ferramentas que a IA pode usar
-        tools_config = [create_calendar_event, create_google_doc, list_calendar_events]
+       tools_config = [
+            create_calendar_event, list_calendar_events, delete_calendar_event, update_calendar_event,
+            create_google_doc, read_google_doc,
+            search_drive_file,
+            create_task, list_tasks,
+            get_unread_emails, create_email_draft
         
         # --- DEFINIÇÃO DE DATAS (CRUCIAL PARA NÃO DAR ERRO) ---
         agora = datetime.datetime.now()
@@ -190,4 +195,5 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
     except Exception as e:
         print(f"❌ Erro AI: {e}")
         return "Tive um problema técnico ao processar sua solicitação. Tente novamente."
+
 
