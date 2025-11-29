@@ -32,7 +32,7 @@ try:
             search_drive_file,
             create_task, list_tasks,
             get_unread_emails, create_email_draft
-        
+       ]
         # --- DEFINIÇÃO DE DATAS (CRUCIAL PARA NÃO DAR ERRO) ---
         agora = datetime.datetime.now()
         data_hoje = agora.strftime("%d-%m-%Y")       # Formato visual (29-11-2025)
@@ -195,5 +195,6 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
     except Exception as e:
         print(f"❌ Erro AI: {e}")
         return "Tive um problema técnico ao processar sua solicitação. Tente novamente."
+
 
 
