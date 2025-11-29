@@ -76,10 +76,19 @@ async def callback(request: Request):
         user_info = service.userinfo().get().execute()
         user_email = user_info.get('email')
 
-        save_user_credentials(user_id, creds)
+       save_user_credentials(user_id, creds)
         register_user(user_id, user_email) 
 
-        msg_sucesso = f"✅ <b>Conectado como:</b> {user_email}\nAgora pode me mandar áudios ou fotos!"
+        # --- AQUI ESTÁ A MUDANÇA ---
+        msg_sucesso = (
+            f"✅ <b>Conectado como:</b> {user_email}\n\n"
+            "<b>Pronto para agilizar! Experimente agora:</b>\n\n"
+            "1️⃣ <b>Agenda:</b> Pergunte <i>'Como está minha agenda amanhã?'</i>\n"
+            "2️⃣ <b>Áudio:</b> Envie uma gravação longa e peça <i>'Faça uma ata disto.'</i>\n"
+            "3️⃣ <b>Visão:</b> Mande foto de um documento e diga <i>'Transcreva para mim.'</i>"
+        )
+        # ---------------------------
+
         await send_telegram_message(user_id, msg_sucesso)
         
         return f"Sucesso! Conectado como {user_email}. Pode fechar esta janela."
@@ -140,3 +149,4 @@ async def telegram_webhook(request: Request):
             os.remove(temp_file)
 
     return {"status": "ok"}
+
