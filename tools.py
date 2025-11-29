@@ -75,6 +75,39 @@ def create_calendar_event(summary: str, start_datetime: str, user_id: str, end_d
             end_datetime = (dt + datetime.timedelta(hours=1)).isoformat()
         except ValueError:
             return "Erro: Formato de data inválido."
+
+def delete_calendar_event(user_id: str, event_id: str):
+    """Remove um evento pelo ID (O ID é mostrado na listagem)."""
+    service = get_service(user_id, 'calendar', 'v3')
+    try:
+        service.events().delete(calendarId='primary', eventId=event_id).execute()
+        return "Evento removido com sucesso."
+    except Exception as e:
+        return f"Erro ao deletar: {e}"
+
+def update_calendar_event(user_id: str, event_id: str, new_summary: str = None, new_start_time: str = None):
+    """Atualiza título ou horário de um evento existente."""
+    service = get_service(user_id, 'calendar', 'v3')
+    
+    event_patch = {}
+    if new_summary:
+        event_patch['summary'] = new_summary
+        
+    if new_start_time:
+        # Assume duração de 1h se mudar o horário
+        try:
+            dt = datetime.datetime.fromisoformat(new_start_time)
+            end_time = (dt + datetime.timedelta(hours=1)).isoformat()
+            event_patch['start'] = {'dateTime': new_start_time, 'timeZone': 'America/Sao_Paulo'}
+            event_patch['end'] = {'dateTime': end_time, 'timeZone': 'America/Sao_Paulo'}
+        except:
+            return "Erro: Formato de data inválido (Use ISO)."
+
+    try:
+        service.events().patch(calendarId='primary', eventId=event_id, body=event_patch).execute()
+        return "Evento atualizado com sucesso."
+    except Exception as e:
+        return f"Erro ao atualizar: {e}"
 # --- LISTAR EVENTOS (CORRIGIDO: REMOVE DUPLICATAS) ---
 def list_calendar_events(user_id: str, date_str: str = None):
     service = get_service(user_id, 'calendar', 'v3')
@@ -170,7 +203,7 @@ def list_calendar_events(user_id: str, date_str: str = None):
     except Exception as e:
         print(f"❌ [TOOLS] Erro Agenda: {e}")
         return f"Erro do Google: {str(e)}"
-# --- DOCS (Sem mudanças) ---
+# --- DOCS 
 def create_google_doc(title: str, content: str, user_id: str):
     docs_service = get_service(user_id, 'docs', 'v1')
     if not docs_service: return "Erro autenticação Docs."
@@ -184,5 +217,108 @@ def create_google_doc(title: str, content: str, user_id: str):
         return f"Documento criado: {link}"
     except Exception as e:
         return f"Erro Doc: {str(e)}"
+        def read_google_doc(user_id: str, doc_id: str):
+    """Lê o texto completo de um Google Doc."""
+    service = get_service(user_id, 'docs', 'v1')
+    try:
+        doc = service.documents().get(documentId=doc_id).execute()
+        content = doc.get('body').get('content')
+        full_text = ""
+        for element in content:
+            if 'paragraph' in element:
+                elements = element.get('paragraph').get('elements')
+                for elem in elements:
+                    full_text += elem.get('textRun', {}).get('content', '')
+        return f"Conteúdo do Doc:\n{full_text[:3000]}..." # Limite para não estourar contexto
+    except Exception as e:
+        return f"Erro ao ler doc: {e}"
+
+# --- 3. DRIVE: BUSCAR ARQUIVO ---
+
+def search_drive_file(user_id: str, query_name: str):
+    """Procura arquivos no Drive pelo nome e retorna ID e Link."""
+    service = get_service(user_id, 'drive', 'v3')
+    try:
+        # Busca arquivos que não estão na lixeira e contém o nome
+        q = f"name contains '{query_name}' and trashed = false"
+        results = service.files().list(q=q, pageSize=5, fields="nextPageToken, files(id, name, webViewLink)").execute()
+        items = results.get('files', [])
+
+        if not items:
+            return f"Nenhum arquivo encontrado com o nome '{query_name}'."
+
+        resp = "Arquivos encontrados:\n"
+        for item in items:
+            resp += f"- {item['name']} (ID: {item['id']})\n  Link: {item['webViewLink']}\n"
+        return resp
+    except Exception as e:
+        return f"Erro na busca do Drive: {e}"
+
+# --- 4. TASKS: LISTAR E CRIAR ---
+
+def create_task(user_id: str, title: str, notes: str = None):
+    """Cria uma tarefa no Google Tasks (Lista padrão)."""
+    service = get_service(user_id, 'tasks', 'v1')
+    try:
+        body = {'title': title, 'notes': notes}
+        task = service.tasks().insert(tasklist='@default', body=body).execute()
+        return f"Tarefa criada: {task['title']}"
+    except Exception as e:
+        return f"Erro Tasks: {e}"
+
+def list_tasks(user_id: str):
+    """Lista tarefas pendentes."""
+    service = get_service(user_id, 'tasks', 'v1')
+    try:
+        results = service.tasks().list(tasklist='@default', showCompleted=False, maxResults=10).execute()
+        items = results.get('items', [])
+        if not items: return "Nenhuma tarefa pendente."
+        
+        resp = "Minhas Tarefas:\n"
+        for item in items:
+            resp += f"☐ {item['title']}\n"
+        return resp
+    except Exception as e:
+        return f"Erro Tasks: {e}"
+
+# --- 5. GMAIL: LER E RASCUNHAR (SEM ENVIAR) ---
+
+def get_unread_emails(user_id: str):
+    """Lista os últimos 5 emails não lidos."""
+    service = get_service(user_id, 'gmail', 'v1')
+    try:
+        results = service.users().messages().list(userId='me', q='is:unread', maxResults=5).execute()
+        messages = results.get('messages', [])
+        
+        if not messages: return "Você não tem novos emails."
+
+        resp = "📩 Últimos emails não lidos:\n"
+        for msg in messages:
+            m = service.users().messages().get(userId='me', id=msg['id'], format='metadata').execute()
+            headers = m['payload']['headers']
+            subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'Sem Assunto')
+            sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Desconhecido')
+            resp += f"- De: {sender} | Assunto: {subject}\n"
+        return resp
+    except Exception as e:
+        return f"Erro Gmail: {e}"
+
+def create_email_draft(user_id: str, to: str, subject: str, body_text: str):
+    """Cria um RASCUNHO no Gmail (o usuário revisa e envia depois)."""
+    service = get_service(user_id, 'gmail', 'v1')
+    try:
+        message = EmailMessage()
+        message.set_content(body_text)
+        message['To'] = to
+        message['Subject'] = subject
+
+        encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        create_message = {'message': {'raw': encoded_message}}
+        
+        draft = service.users().drafts().create(userId='me', body=create_message).execute()
+        return f"Rascunho criado com sucesso! ID: {draft['id']} (Verifique seu Gmail)"
+    except Exception as e:
+        return f"Erro ao criar rascunho: {e}"
+
 
 
