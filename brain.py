@@ -16,42 +16,45 @@ try:
     
     tools_config = [create_calendar_event, create_google_doc, list_calendar_events]
     
+    # --- CONTEXTO DE DATA E HORA ---
     agora = datetime.datetime.now()
-    data_hoje = agora.strftime("%Y-%m-%d")
+    data_hoje_iso = agora.strftime("%Y-%m-%d")
+    data_hoje_human = agora.strftime("%d-%m-%y")
+    hora_atual = agora.strftime("%H:%M")
+    dia_semana = agora.strftime("%A")
     
-    # --- PROMPT V2: INSTRUÇÕES TÉCNICAS RÍGIDAS ---
     SYSTEM_PROMPT = f"""
-    Você é a Agiliza. Hoje: {agora.strftime("%Y-%m-%d %H:%M")}.
-    Seu foco: Ajudar o usuário gerenciando Agenda e Docs.
+    Você é a Agiliza. 
+    Hoje é: {data_hoje_human} ({dia_semana}) e agora são {hora_atual}.
     
     Poderes Disponíveis:
     1. create_calendar_event: Agendar.
     2. list_calendar_events: Ver horários.
     3. create_google_doc: Criar documentos.
 
-    DIRETRIZES TÉCNICAS (FORMATO HTML):
-    O Telegram espera formatação em HTML. Não use Markdown (* ou #).
-    1. Negrito: Use <b>exemplo</b>.
-    2. Links: Use <a href="url">texto</a>.
-    3. Itálico: Use <i>exemplo</i>.
-    
-    DIRETRIZES DE EXECUÇÃO DE FERRAMENTAS (MUITO IMPORTANTE):
-    Toda ferramenta tem um argumento obrigatório chamado 'user_id'.
-    Você NÃO sabe qual é esse ID nativamente, mas ele será fornecido no contexto de cada mensagem.
-    
-    REGRAS:
-    1. Ao chamar 'create_calendar_event' ou 'list_calendar_events', copie EXATAMENTE o valor numérico fornecido no campo 'SYSTEM_ID' do contexto.
-    2. Nunca invente um ID. Nunca use strings como 'user_id' ou 'meu_id'. Use o número.
-    3. Se o SYSTEM_ID for '12345', o argumento user_id DEVE ser '12345'.
+    DIRETRIZES TÉCNICAS (HTML):
+    O Telegram usa HTML. Use <b>negrito</b>, <i>itálico</i> e <a href="url">links</a>. Não use Markdown.
+
+    DIRETRIZES DE NOME:
+    Use o NOME DO USUÁRIO (fornecido no contexto como 'USER_NAME') para ser pessoal.
+    Exemplo: "Olá Deivlin, tudo bem?" em vez de "Olá usuário".
+    Se não houver nome, não invente, seja neutro.
+
+    DIRETRIZES DE FORMATAÇÃO DE DATA (CHAT):
+    Ao falar com o usuário, use ESTRITAMENTE o formato: DD-MM-AA, às HH:MM.
+    Exemplo: "Agendado para 28-11-25, às 14:00".
+
+    DIRETRIZES DE FUSO HORÁRIO E AGENDA (CRÍTICO):
+    1. A data interna para a ferramenta (create_calendar_event) DEVE ser ISO (YYYY-MM-DDTHH:MM:SS).
+    2. O horário é sempre 'America/Sao_Paulo'.
+    3. Se o usuário pedir "Das 7h às 20h", você DEVE preencher o 'start_datetime' (07:00) E o 'end_datetime' (20:00). Se você omitir o final, o sistema colocará apenas 1 hora de duração, o que causará erro.
+    4. Argumento 'user_id' é obrigatório (Use o SYSTEM_ID do contexto).
 
     DIRETRIZES DE COMPORTAMENTO:
-    1. Regra Email: Use sempre o e-mail do usuário ({get_user_email} ou contexto).
+    1. Regra Email: Use sempre o e-mail do usuário.
     2. Regra Tom: Professoral, educado, didático.
-    3. Regra Emojis: Não use emojis gráficos.
+    3. Regra Emojis: Sem emojis gráficos.
     4. Regra Áudio: Lembre que pode mandar áudio.
-    5. Regra Formatação: Use quebras de linha para clareza.
-
-    Regra Técnica Agenda: Use formato ISO '{data_hoje}T15:00:00'.
     """
     
     model = genai.GenerativeModel(
@@ -64,8 +67,9 @@ except Exception as e:
 
 # ----------------------------
 
-def process_ai_request(user_text: str, user_id: str, file_path=None):
-    print(f"🧠 [CÉREBRO] User {user_id}: {user_text}")
+# Nova assinatura recebe user_name
+def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=None):
+    print(f"🧠 [CÉREBRO] User {user_id} ({user_name}): {user_text}")
     
     creds = load_user_credentials(user_id)
     
@@ -79,9 +83,11 @@ def process_ai_request(user_text: str, user_id: str, file_path=None):
             
         link_login = f"{render_url}/auth/login?state={user_id}"
         
+        saudacao = f"Prezado(a) <b>{user_name}</b>" if user_name else "Prezado(a) usuário(a)"
+
         mensagem_boas_vindas = (
             "<b>Agiliza IA: Sua rotina no piloto automático</b>\n\n"
-            "Prezado(a) usuário(a), seja bem-vindo(a).\n\n"
+            f"{saudacao}, seja bem-vindo(a).\n\n"
             "Idealizada por <b>Deivlin Vale</b>, esta plataforma foi desenvolvida com um propósito claro: "
             "eliminar o atrito entre você e a sua produtividade.\n\n"
             "<b>Como posso auxiliá-lo de fato?</b>\n\n"
@@ -100,17 +106,16 @@ def process_ai_request(user_text: str, user_id: str, file_path=None):
         
         chat = model.start_chat(history=history, enable_automatic_function_calling=True)
         
-        # --- CONTEXTO REFORÇADO PARA A IA NÃO ERRAR ---
         contexto_sistema = (
-            f"--- DADOS OBRIGATÓRIOS PARA FERRAMENTAS ---\n"
+            f"--- DADOS DE SISTEMA ---\n"
+            f"USER_NAME: {user_name}\n"
             f"E-mail do Usuário: {user_email}\n"
             f"SYSTEM_ID: '{user_id}'\n"
-            f"Atenção IA: Ao usar qualquer ferramenta, preencha o argumento 'user_id' com o valor '{user_id}'.\n"
-            f"-------------------------------------------"
+            f"(Ao usar ferramentas, user_id = '{user_id}')\n"
+            f"------------------------"
         )
         
         inputs = [contexto_sistema]
-        # -----------------------------------------------------
 
         if file_path:
             inputs.append(genai.upload_file(file_path))
