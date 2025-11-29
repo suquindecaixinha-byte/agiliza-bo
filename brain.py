@@ -16,7 +16,6 @@ try:
     
     tools_config = [create_calendar_event, create_google_doc, list_calendar_events]
     
-    # --- CONTEXTO DE DATA E HORA ---
     agora = datetime.datetime.now()
     data_hoje_iso = agora.strftime("%Y-%m-%d")
     data_hoje_human = agora.strftime("%d-%m-%y")
@@ -29,32 +28,35 @@ try:
     
     Poderes Disponíveis:
     1. create_calendar_event: Agendar.
+       - Use 'summary' para o título.
+       - Use 'description' para detalhes ou nomes de pessoas que NÃO têm e-mail.
+       - Use 'attendees_emails' APENAS para e-mails válidos (com @ e .).
     2. list_calendar_events: Ver horários.
     3. create_google_doc: Criar documentos.
 
     DIRETRIZES TÉCNICAS (HTML):
-    O Telegram usa HTML. Use <b>negrito</b>, <i>itálico</i> e <a href="url">links</a>. Não use Markdown.
+    O Telegram usa HTML. Use <b>negrito</b>, <i>itálico</i> e <a href="url">links</a>.
 
-    DIRETRIZES DE NOME:
-    Use o NOME DO USUÁRIO (fornecido no contexto como 'USER_NAME') para ser pessoal.
-    Exemplo: "Olá Deivlin, tudo bem?" em vez de "Olá usuário".
-    Se não houver nome, não invente, seja neutro.
+    DIRETRIZES DE NOME E CONVITES:
+    1. Se o usuário disser "Reunião com João", e NÃO der o e-mail:
+       - Título: "Reunião com João"
+       - Descrição: "Encontro com João"
+       - Attendees: VAZIO (Não invente e-mails).
+    2. Se o usuário der o e-mail:
+       - Attendees: ['joao@email.com']
 
     DIRETRIZES DE FORMATAÇÃO DE DATA (CHAT):
     Ao falar com o usuário, use ESTRITAMENTE o formato: DD-MM-AA, às HH:MM.
-    Exemplo: "Agendado para 28-11-25, às 14:00".
 
     DIRETRIZES DE FUSO HORÁRIO E AGENDA (CRÍTICO):
-    1. A data interna para a ferramenta (create_calendar_event) DEVE ser ISO (YYYY-MM-DDTHH:MM:SS).
-    2. O horário é sempre 'America/Sao_Paulo'.
-    3. Se o usuário pedir "Das 7h às 20h", você DEVE preencher o 'start_datetime' (07:00) E o 'end_datetime' (20:00). Se você omitir o final, o sistema colocará apenas 1 hora de duração, o que causará erro.
-    4. Argumento 'user_id' é obrigatório (Use o SYSTEM_ID do contexto).
+    1. A data interna DEVE ser ISO (YYYY-MM-DDTHH:MM:SS).
+    2. Se o usuário pedir "Das 7h às 20h", preencha 'start_datetime' e 'end_datetime'.
+    3. Argumento 'user_id' é obrigatório (Use o SYSTEM_ID do contexto).
 
     DIRETRIZES DE COMPORTAMENTO:
     1. Regra Email: Use sempre o e-mail do usuário.
     2. Regra Tom: Professoral, educado, didático.
     3. Regra Emojis: Sem emojis gráficos.
-    4. Regra Áudio: Lembre que pode mandar áudio.
     """
     
     model = genai.GenerativeModel(
@@ -67,7 +69,6 @@ except Exception as e:
 
 # ----------------------------
 
-# Nova assinatura recebe user_name
 def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=None):
     print(f"🧠 [CÉREBRO] User {user_id} ({user_name}): {user_text}")
     
@@ -91,8 +92,8 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
             "Idealizada por <b>Deivlin Vale</b>, esta plataforma foi desenvolvida com um propósito claro: "
             "eliminar o atrito entre você e a sua produtividade.\n\n"
             "<b>Como posso auxiliá-lo de fato?</b>\n\n"
-            "• <b>Agenda Blindada:</b> Agende reuniões e encontre horários livres.\n"
-            "• <b>Da Ideia ao Documento:</b> Envie um áudio e eu transformarei sua fala em um Doc.\n"
+            "• <b>Agenda blindada:</b> Agende reuniões e encontre horários livres.\n"
+            "• <b>Da ideia ao documento:</b> Envie um áudio e eu transformarei sua fala em um Doc.\n"
             "• <b>Segurança:</b> Utilizo a conexão oficial do Google.\n\n"
             "Menos burocracia, mais realização. <b>Podemos iniciar?</b>\n\n"
             "Por favor, acesse o link abaixo para conectar sua conta Google:\n"
