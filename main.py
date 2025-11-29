@@ -22,7 +22,7 @@ async def send_telegram_message(chat_id, text):
         await client.post(f"{TELEGRAM_API_URL}/sendMessage", json={
             "chat_id": chat_id,
             "text": text,
-            "parse_mode": "HTML", # <--- MUDANÇA PARA HTML
+            "parse_mode": "HTML", 
             "disable_web_page_preview": True 
         })
 
@@ -42,7 +42,7 @@ async def download_telegram_file(file_id):
 
 @app.get("/")
 async def root():
-    return {"message": "Agiliza Bot (OAuth2 + HTML) rodando!"}
+    return {"message": "Agiliza Bot (V2 - Nome + Fuso) rodando!"}
 
 @app.get("/auth/login")
 async def login(state: str):
@@ -70,7 +70,6 @@ async def callback(request: Request):
         save_user_credentials(user_id, creds)
         register_user(user_id, user_email) 
 
-        # Mensagem de sucesso em HTML
         msg_sucesso = f"✅ <b>Conectado como:</b> {user_email}\nAgora pode me pedir para agendar coisas!"
         await send_telegram_message(user_id, msg_sucesso)
         
@@ -84,10 +83,15 @@ async def telegram_webhook(request: Request):
     data = await request.json()
     if "message" not in data: return {"status": "ignored"}
     
-    chat_id = data["message"]["chat"]["id"]
-    user_text = data["message"].get("text", "")
-    voice_info = data["message"].get("voice") or data["message"].get("audio")
+    message = data["message"]
+    chat_id = message["chat"]["id"]
+    user_text = message.get("text", "")
+    voice_info = message.get("voice") or message.get("audio")
     
+    # --- NOVIDADE: PEGAR O NOME ---
+    first_name = message.get("from", {}).get("first_name", "")
+    # ------------------------------
+
     temp_file = None
     
     try:
@@ -98,7 +102,8 @@ async def telegram_webhook(request: Request):
             temp_file = await download_telegram_file(voice_info["file_id"])
             user_text = user_text or ""
 
-        ai_response = process_ai_request(user_text, str(chat_id), temp_file)
+        # Passamos o nome para o cérebro agora
+        ai_response = process_ai_request(user_text, str(chat_id), first_name, temp_file)
         await send_telegram_message(chat_id, ai_response)
 
     except Exception as e:
