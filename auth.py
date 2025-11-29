@@ -11,7 +11,6 @@ load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-# Blindagem contra erro de conexão no Supabase
 supabase = None
 if SUPABASE_URL and SUPABASE_KEY:
     try:
@@ -20,11 +19,9 @@ if SUPABASE_URL and SUPABASE_KEY:
         print(f"Erro Supabase Auth: {e}")
 
 # Configuração do OAuth
-# ATENÇÃO: A URL deve ser exata (sem barra no final se configurou assim no Google)
 RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "http://localhost:10000") 
 REDIRECT_URI = f"{RENDER_URL}/auth/callback"
 
-# --- A CORREÇÃO ESTÁ AQUI EMBAIXO ---
 SCOPES = [
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/documents',
@@ -64,9 +61,13 @@ def save_user_credentials(user_id: str, credentials):
     creds_json = credentials.to_json()
     
     try:
-        # Usamos upsert para garantir que crie ou atualize
-        # Nota: Aqui salvamos apenas o token. O email salvamos no main.py via register_user
-        supabase.table("users").update({"credentials_json": creds_json}).eq("user_id", str(user_id)).execute()
+        # --- CORREÇÃO: Usar 'upsert' de verdade ---
+        data = {
+            "user_id": str(user_id),
+            "credentials_json": creds_json
+        }
+        # Upsert cria se não existe, atualiza se existe.
+        supabase.table("users").upsert(data).execute()
         return True
     except Exception as e:
         print(f"Erro ao salvar credenciais: {e}")
@@ -87,5 +88,3 @@ def load_user_credentials(user_id: str):
     except Exception as e:
         print(f"Erro ao carregar credenciais: {e}")
         return None
-
-
