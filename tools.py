@@ -58,15 +58,17 @@ def list_calendar_events(user_id: str, date_str: str = None):
     except Exception as e:
         return f"Erro ao ler agenda: {str(e)}"
 
-# --- CRIAR EVENTO (Correção de Fuso) ---
-def create_calendar_event(summary: str, start_datetime: str, user_id: str, end_datetime: str = None, attendees_emails: list[str] = None):
+
+# --- CRIAR EVENTO (ATUALIZADO: Com Descrição) ---
+def create_calendar_event(summary: str, start_datetime: str, user_id: str, end_datetime: str = None, attendees_emails: list[str] = None, description: str = None):
     """
-    Cria evento. Datas devem estar em formato ISO.
+    Cria evento. 
+    - summary: Título do evento.
+    - description: Detalhes extras (ex: 'Encontrar com João'). Útil quando não se tem o e-mail.
     """
     service = get_service(user_id, 'calendar', 'v3')
     if not service: return "ERRO: Falha de autenticação."
 
-    # Se a IA não mandar o fim, adiciona 1h (Isso causava o erro se ela esquecesse)
     if not end_datetime:
         try:
             dt = datetime.datetime.fromisoformat(start_datetime)
@@ -80,25 +82,43 @@ def create_calendar_event(summary: str, start_datetime: str, user_id: str, end_d
         'end': {'dateTime': end_datetime, 'timeZone': 'America/Sao_Paulo'}
     }
 
+    # Adiciona a descrição se houver
+    if description:
+        event_body['description'] = description
+
+    # Lógica de convidados (Só adiciona se for e-mail válido)
     if attendees_emails:
-        attendees_list = [{'email': email.strip()} for email in attendees_emails]
-        event_body['attendees'] = attendees_list
+        valid_attendees = []
+        for email in attendees_emails:
+            if isinstance(email, str) and "@" in email and "." in email:
+                clean_email = email.strip()
+                if clean_email:
+                    valid_attendees.append({'email': clean_email})
+        
+        if valid_attendees:
+            event_body['attendees'] = valid_attendees
 
     try:
-        # Pega info do calendario para confirmar onde foi salvo
-        calendar_info = service.calendars().get(calendarId='primary').execute()
-        saved_email = calendar_info.get('id', 'primary')
+        try:
+            calendar_info = service.calendars().get(calendarId='primary').execute()
+            saved_email = calendar_info.get('id', 'primary')
+        except:
+            saved_email = "Agenda Principal"
 
         event = service.events().insert(calendarId='primary', body=event_body).execute()
         link = event.get('htmlLink')
         
-        # Retorna mensagem detalhada para debug
-        return f"Sucesso! Evento '{summary}' criado na conta {saved_email}. Link: {link}"
+        invite_msg = ""
+        if attendees_emails and 'attendees' in event_body:
+            invite_msg = f" (Convite enviado para {len(event_body['attendees'])} pessoas)"
+        elif attendees_emails:
+            invite_msg = " (Nenhum e-mail válido, nomes salvos na descrição)"
+
+        return f"Sucesso! Evento '{summary}' criado em {saved_email}.{invite_msg} Link: {link}"
         
     except Exception as e:
         print(f"❌ [TOOLS] Erro Agenda: {e}")
         return f"Erro do Google: {str(e)}"
-
 # --- DOCS (Sem mudanças) ---
 def create_google_doc(title: str, content: str, user_id: str):
     docs_service = get_service(user_id, 'docs', 'v1')
@@ -113,3 +133,4 @@ def create_google_doc(title: str, content: str, user_id: str):
         return f"Documento criado: {link}"
     except Exception as e:
         return f"Erro Doc: {str(e)}"
+
