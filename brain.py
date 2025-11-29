@@ -19,7 +19,7 @@ try:
     agora = datetime.datetime.now()
     data_hoje = agora.strftime("%Y-%m-%d")
     
-    # --- PROMPT PARA HTML (MUITO MAIS SEGURO) ---
+    # --- PROMPT V2: INSTRUÇÕES TÉCNICAS RÍGIDAS ---
     SYSTEM_PROMPT = f"""
     Você é a Agiliza. Hoje: {agora.strftime("%Y-%m-%d %H:%M")}.
     Seu foco: Ajudar o usuário gerenciando Agenda e Docs.
@@ -31,12 +31,19 @@ try:
 
     DIRETRIZES TÉCNICAS (FORMATO HTML):
     O Telegram espera formatação em HTML. Não use Markdown (* ou #).
-    
-    1. Negrito: Use a tag <b>exemplo</b>.
+    1. Negrito: Use <b>exemplo</b>.
     2. Links: Use <a href="url">texto</a>.
     3. Itálico: Use <i>exemplo</i>.
-    4. NÃO use tags complexas como <ul>, <li>, <p> ou <br>. Use apenas quebras de linha normais.
     
+    DIRETRIZES DE EXECUÇÃO DE FERRAMENTAS (MUITO IMPORTANTE):
+    Toda ferramenta tem um argumento obrigatório chamado 'user_id'.
+    Você NÃO sabe qual é esse ID nativamente, mas ele será fornecido no contexto de cada mensagem.
+    
+    REGRAS:
+    1. Ao chamar 'create_calendar_event' ou 'list_calendar_events', copie EXATAMENTE o valor numérico fornecido no campo 'SYSTEM_ID' do contexto.
+    2. Nunca invente um ID. Nunca use strings como 'user_id' ou 'meu_id'. Use o número.
+    3. Se o SYSTEM_ID for '12345', o argumento user_id DEVE ser '12345'.
+
     DIRETRIZES DE COMPORTAMENTO:
     1. Regra Email: Use sempre o e-mail do usuário ({get_user_email} ou contexto).
     2. Regra Tom: Professoral, educado, didático.
@@ -72,7 +79,6 @@ def process_ai_request(user_text: str, user_id: str, file_path=None):
             
         link_login = f"{render_url}/auth/login?state={user_id}"
         
-        # Mensagem formatada manualmente em HTML
         mensagem_boas_vindas = (
             "<b>Agiliza IA: Sua rotina no piloto automático</b>\n\n"
             "Prezado(a) usuário(a), seja bem-vindo(a).\n\n"
@@ -94,7 +100,18 @@ def process_ai_request(user_text: str, user_id: str, file_path=None):
         
         chat = model.start_chat(history=history, enable_automatic_function_calling=True)
         
-        inputs = [f"CONTEXTO: Usuário logado: {user_email}"]
+        # --- CONTEXTO REFORÇADO PARA A IA NÃO ERRAR ---
+        contexto_sistema = (
+            f"--- DADOS OBRIGATÓRIOS PARA FERRAMENTAS ---\n"
+            f"E-mail do Usuário: {user_email}\n"
+            f"SYSTEM_ID: '{user_id}'\n"
+            f"Atenção IA: Ao usar qualquer ferramenta, preencha o argumento 'user_id' com o valor '{user_id}'.\n"
+            f"-------------------------------------------"
+        )
+        
+        inputs = [contexto_sistema]
+        # -----------------------------------------------------
+
         if file_path:
             inputs.append(genai.upload_file(file_path))
         if user_text:
