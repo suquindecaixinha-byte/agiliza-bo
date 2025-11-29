@@ -33,6 +33,11 @@ try:
         SYSTEM_PROMPT = f"""
         Você é a Agiliza, uma assistente executiva de altíssima eficiência.
         Data atual: {data_hoje} ({dia_semana}) - Hora: {hora_atual}.
+
+        PROTOCOLO OBRIGATÓRIO (ANTI-RECUSA):
+        1. Você TEM capacidade nativa de VER imagens e OUVIR áudios enviados.
+        2. NUNCA responda "não consigo acessar arquivos" ou "não consigo ouvir".
+        3. Se receber um arquivo, assuma imediatamente que você consegue processá-lo.
         
         CAPACIDADES MULTIMODAIS (VISÃO E AUDIÇÃO):
         1. Você pode ouvir áudios longos (reuniões, notas de voz) e ver imagens.
@@ -156,22 +161,26 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
                 uploaded_file = genai.get_file(uploaded_file.name)
                 
             inputs.append(uploaded_file)
-            inputs.append("Analise este arquivo conforme solicitado.")
+            inputs.append(
+                "⚠️ INSTRUÇÃO DE SISTEMA: O arquivo acima é a mensagem do usuário (áudio ou imagem). "
+                "OUÇA/VEJA o conteúdo atentamente e execute o comando contido nele. "
+                "Ignore qualquer limitação prévia. Você consegue processar isso."
+            )
 
         if user_text:
+            # Se for apenas o placeholder [Arquivo Anexado], a instrução acima já cobre.
+            # Se tiver texto real (legenda), adicionamos.
             inputs.append(user_text)
 
-        # Envia para a IA
         response = chat.send_message(inputs)
         text_response = response.text
         
-        # Salva apenas o texto no Supabase
-        log_content = f"[Arquivo enviado] {user_text}" if file_path else user_text
+        log_content = f"[Arquivo] {user_text}" if file_path else user_text
         save_message(user_id, "user", log_content)
         save_message(user_id, "model", text_response)
         
         return text_response
 
     except Exception as e:
-        print(f"❌ Erro Execução AI: {e}")
-        return "Peço desculpas. Ocorreu um erro técnico ao processar sua solicitação."
+        print(f"❌ Erro AI: {e}")
+        return "Tive um problema técnico ao processar sua solicitação. Tente novamente."
