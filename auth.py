@@ -23,9 +23,12 @@ RENDER_URL = os.getenv("RENDER_EXTERNAL_URL", "http://localhost:10000")
 REDIRECT_URI = f"{RENDER_URL}/auth/callback"
 
 SCOPES = [
-    'https://www.googleapis.com/auth/calendar',
+'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/documents',
-    'https://www.googleapis.com/auth/drive',
+    'https://www.googleapis.com/auth/drive',        # Busca de arquivos
+    'https://www.googleapis.com/auth/tasks',        # Google Tasks
+    'https://www.googleapis.com/auth/gmail.readonly', # Ler emails
+    'https://www.googleapis.com/auth/gmail.compose',  # Criar rascunhos (sem enviar)
     'https://www.googleapis.com/auth/userinfo.email',
     'openid'
 ]
@@ -88,3 +91,4 @@ def load_user_credentials(user_id: str):
     except Exception as e:
         print(f"Erro ao carregar credenciais: {e}")
         return None
+
