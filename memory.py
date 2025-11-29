@@ -85,3 +85,12 @@ def register_user(user_id: str, email: str):
         print(f"👤 [USER] Usuário salvo/atualizado: {email}")
     except Exception as e:
         print(f"⚠️ Erro ao registrar usuário: {e}")
+        
+def clear_memory(user_id: str):
+    """Apaga o histórico de conversa do usuário."""
+    if not supabase: return
+    try:
+        supabase.table("memory").delete().eq("user_id", str(user_id)).execute()
+    except Exception as e:
+        print(f"Erro ao limpar memória: {e}")
+
