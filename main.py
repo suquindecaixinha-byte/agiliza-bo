@@ -27,22 +27,31 @@ async def send_telegram_message(chat_id, text):
         })
 
 async def download_telegram_file(file_id):
+    """Baixa arquivos (áudio ou imagem) detectando a extensão correta."""
     async with httpx.AsyncClient() as client:
+        # 1. Pega o caminho do arquivo na API do Telegram
         resp = await client.get(f"{TELEGRAM_API_URL}/getFile?file_id={file_id}")
         file_path_info = resp.json()['result']['file_path']
+        
+        # 2. Extrai a extensão original (ex: .jpg, .oga, .mp3)
+        file_extension = os.path.splitext(file_path_info)[1]
+        
+        # 3. Baixa o conteúdo
         download_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path_info}"
         file_content = await client.get(download_url)
         
-        temp_filename = f"temp_{file_id}.ogg" 
+        # 4. Salva com a extensão correta
+        temp_filename = f"temp_{file_id}{file_extension}" 
         with open(temp_filename, "wb") as f:
             f.write(file_content.content)
+            
         return temp_filename
 
 # --- ROTAS DO SISTEMA ---
 
 @app.get("/")
 async def root():
-    return {"message": "Agiliza Bot (V2 - Nome + Fuso) rodando!"}
+    return {"message": "Agiliza Bot (V3 - Multimodal) rodando!"}
 
 @app.get("/auth/login")
 async def login(state: str):
@@ -70,7 +79,7 @@ async def callback(request: Request):
         save_user_credentials(user_id, creds)
         register_user(user_id, user_email) 
 
-        msg_sucesso = f"✅ <b>Conectado como:</b> {user_email}\nAgora pode me pedir para agendar coisas!"
+        msg_sucesso = f"✅ <b>Conectado como:</b> {user_email}\nAgora pode me mandar áudios ou fotos!"
         await send_telegram_message(user_id, msg_sucesso)
         
         return f"Sucesso! Conectado como {user_email}. Pode fechar esta janela."
@@ -85,12 +94,25 @@ async def telegram_webhook(request: Request):
     
     message = data["message"]
     chat_id = message["chat"]["id"]
-    user_text = message.get("text", "")
-    voice_info = message.get("voice") or message.get("audio")
     
-    # --- NOVIDADE: PEGAR O NOME ---
+    # Captura texto (pode vir na legenda da foto também)
+    user_text = message.get("text") or message.get("caption") or ""
+    
+    # --- NOVIDADE: DETECÇÃO MULTIMODAL ---
+    file_id = None
+    
+    # 1. Verifica se é Áudio/Voz
+    if message.get("voice"):
+        file_id = message["voice"]["file_id"]
+    elif message.get("audio"):
+        file_id = message["audio"]["file_id"]
+    
+    # 2. Verifica se é Foto (Telegram manda várias qualidades, pegamos a última/maior)
+    elif message.get("photo"):
+        file_id = message["photo"][-1]["file_id"]
+    
+    # --- PEGAR O NOME ---
     first_name = message.get("from", {}).get("first_name", "")
-    # ------------------------------
 
     temp_file = None
     
@@ -98,19 +120,22 @@ async def telegram_webhook(request: Request):
         async with httpx.AsyncClient() as client:
             await client.post(f"{TELEGRAM_API_URL}/sendChatAction", json={"chat_id": chat_id, "action": "typing"})
 
-        if voice_info:
-            temp_file = await download_telegram_file(voice_info["file_id"])
-            user_text = user_text or ""
+        # Se houver arquivo (audio ou foto), baixamos
+        if file_id:
+            temp_file = await download_telegram_file(file_id)
+            if not user_text: 
+                user_text = "[Arquivo enviado]" # Placeholder caso não haja legenda
 
-        # Passamos o nome para o cérebro agora
+        # Passamos para o cérebro
         ai_response = process_ai_request(user_text, str(chat_id), first_name, temp_file)
         await send_telegram_message(chat_id, ai_response)
 
     except Exception as e:
         print(f"❌ Erro no servidor: {e}")
-        await send_telegram_message(chat_id, "Tive um erro interno no servidor.")
+        await send_telegram_message(chat_id, "Tive um erro interno ao processar sua mensagem.")
     
     finally:
+        # Limpeza do arquivo temporário
         if temp_file and os.path.exists(temp_file):
             os.remove(temp_file)
 
