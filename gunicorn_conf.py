@@ -1,9 +1,11 @@
-# gunicorn_conf.py
 import multiprocessing
 
-# Configurações para o Render/Heroku
+# Configurações para o Render
 bind = "0.0.0.0:10000"
-workers = 1  # No plano free, 1 worker é seguro
+workers = 1  # Manter 1 worker evita estourar a memória RAM do plano free
 worker_class = "uvicorn.workers.UvicornWorker"
-timeout = 120 # Tempo para a IA pensar sem dar timeout
+
+# AUMENTADO: Tempo limite para 400 segundos.
+# Necessário para processar áudios longos e uploads de arquivos grandes.
+timeout = 400 
 keepalive = 5
