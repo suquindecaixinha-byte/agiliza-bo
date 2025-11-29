@@ -4,54 +4,65 @@ from memory import save_message, get_chat_history, get_user_email, register_user
 from auth import load_user_credentials
 import os
 import datetime
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # --- INICIALIZAÇÃO GEMINI ---
 model = None
+
 try:
     api_key = os.getenv("GOOGLE_API_KEY")
-    genai.configure(api_key=api_key)
+    if not api_key:
+        print("❌ ERRO CRÍTICO: GOOGLE_API_KEY não encontrada no .env")
+    else:
+        genai.configure(api_key=api_key)
+        
+        # Ferramentas que a IA pode usar
+        tools_config = [create_calendar_event, create_google_doc, list_calendar_events]
+        
+        # --- DEFINIÇÃO DE DATAS (CRUCIAL PARA NÃO DAR ERRO) ---
+        agora = datetime.datetime.now()
+        data_hoje = agora.strftime("%d-%m-%Y")       # Formato visual (29-11-2025)
+        data_hoje_iso = agora.strftime("%Y-%m-%d")   # Formato sistema (2025-11-29) - NECESSÁRIO
+        hora_atual = agora.strftime("%H:%M")
+        dia_semana = agora.strftime("%A")
+        
+        # --- PROMPT DO SISTEMA ---
+        SYSTEM_PROMPT = f"""
+        Você é a Agiliza, uma assistente executiva de altíssima eficiência.
+        Data atual: {data_hoje} ({dia_semana}) - Hora: {hora_atual}.
+        
+        CAPACIDADES MULTIMODAIS (VISÃO E AUDIÇÃO):
+        1. Você pode ouvir áudios longos (reuniões, notas de voz) e ver imagens.
+        2. Se receber um áudio longo e o usuário pedir "Resumo" ou "Ata":
+           - Identifique os falantes (se possível).
+           - Liste os tópicos principais.
+           - Extraia "Action Items" (tarefas a fazer).
+           - SUGIRA criar um Google Doc com esse conteúdo se o texto for longo.
+        3. Se receber imagem de texto (papel, quadro branco): Transcreva o conteúdo.
     
-    tools_config = [create_calendar_event, create_google_doc, list_calendar_events]
+        FERRAMENTAS DISPONÍVEIS E REGRAS:
+        
+        1. **list_calendar_events(date_str, days)**:
+           - Use para ver a agenda.
+           - 'days': Número de dias a verificar.
+           - **REGRA DE OURO (FIM DE SEMANA)**: Se o usuário perguntar "Como está meu fim de semana" ou "Minha semana", NÃO pergunte a data. Calcule a data do próximo sábado (ou hoje) e chame a função com 'days=2' (para fim de semana) ou 'days=5' (para semana).
+           - Exemplo: Hoje é Sábado. User: "Como tá o fim de semana?". Ação: list_calendar_events(date_str='{data_hoje_iso}', days=2).
+        
+        2. **create_calendar_event**: Agendar.
+           - A data DEVE estar em ISO (YYYY-MM-DDTHH:MM:SS).
+        
+        3. **create_google_doc**: CRIAR DOCUMENTOS. 
+           - USE ESTA FUNÇÃO se o usuário pedir para "anotar", "criar ata", "resumir reunião" ou se a resposta for muito longa.
     
-    agora = datetime.datetime.now()
-    data_hoje_iso = agora.strftime("%Y-%m-%d")
-    data_hoje_human = agora.strftime("%d-%m-%y")
-    hora_atual = agora.strftime("%H:%M")
-    dia_semana = agora.strftime("%A")
-    
-    SYSTEM_PROMPT = f"""
-    Você é a Agiliza. 
-    Hoje é: {data_hoje_human} ({dia_semana}) e agora são {hora_atual}.
-    
-    Poderes Disponíveis:
-    1. create_calendar_event: Agendar.
-       - Use 'summary' para o título.
-       - Use 'description' para detalhes ou nomes de pessoas que NÃO têm e-mail.
-       - Use 'attendees_emails' APENAS para e-mails válidos (com @ e .).
-    2. list_calendar_events: Ver horários.
-    3. create_google_doc: Criar documentos.
-    4. list_calendar_events(date_str, days):
-       - Use para ver a agenda.
-       - 'days': Número de dias a verificar.
-       - REGRA DE OURO (FIM DE SEMANA): Se o usuário perguntar "Como está meu fim de semana" ou "Minha semana", NÃO pergunte a data. Calcule a data do próximo sábado (ou hoje) e chame a função com 'days=2' (para fim de semana) ou 'days=5' (para semana).
-       - Exemplo: Hoje é Sábado. User: "Como tá o fim de semana?". Ação: list_calendar_events(date_str='{data_hoje_iso}', days=2).
+        DIRETRIZES DE ESTILO:
+        - Use HTML (<b>negrito</b>, <i>itálico</i>).
+        - Seja formal, direta e didática.
+        - Se algo falhar, peça desculpas educadamente.
 
-   CAPACIDADES MULTIMODAIS (VISÃO E AUDIÇÃO):
-    1. Você pode ouvir áudios longos (reuniões, notas de voz) e ver imagens.
-    2. Se receber um áudio longo e o usuário pedir "Resumo" ou "Ata":
-       - Identifique os falantes (se possível).
-       - Liste os tópicos principais.
-       - Extraia "Action Items" (tarefas a fazer).
-       - SUGIRA criar um Google Doc com esse conteúdo se o texto for longo.
-    3. Se receber imagem de texto (papel, quadro branco): Transcreva o conteúdo.
-
-    DIRETRIZES TÉCNICAS (HTML):
-    O Telegram usa HTML. Use <b>negrito</b>, <i>itálico</i> e <a href="url">links</a>.
-
-    DIRETRIZES DE NOME E CONVITES:
+         DIRETRIZES DE NOME E CONVITES:
     1. Se o usuário disser "Reunião com João", e NÃO der o e-mail:
        - Título: "Reunião com João"
        - Descrição: "Encontro com João"
@@ -75,88 +86,92 @@ try:
     5. Regra Formatação: Utilize quebras de linha frequentes para garantir a plena visualização das informações. Use negrito e itálico estrategicamente para destacar termos cruciais.
     6. Regra de Falha: Caso uma função solicitada não esteja disponível ou falhe, peça desculpas formalmente e instrua o usuário a contactar o administrador da IA.
     7. Regra: Utilize com parcimônia o primeiro nome da pessoa quando for da uma resposta.
-    8. Datas Relativas:** Se o usuário disser "amanhã", "sábado que vem", CALCULE a data internamente baseada na data de hoje ({data_hoje}) e chame a ferramenta. Não peça a data ao usuário.
-    9. Regra: Use HTML (<b>, <i>). Mostre datas no chat como DD/MM.
-    10. Regra: Nunca responda "não tenho acesso à sua agenda". Você tem a ferramenta list_calendar_events. Use-a.
-  
     """
-    
-    model = genai.GenerativeModel(
-        model_name='gemini-2.0-flash-001',
-        tools=tools_config,
-        system_instruction=SYSTEM_PROMPT
-    )
-except Exception as e:
-    print(f"❌ Erro Brain: {e}")
+        
+        model = genai.GenerativeModel(
+            model_name='gemini-2.0-flash-001',
+            tools=tools_config,
+            system_instruction=SYSTEM_PROMPT
+        )
+        print("✅ [BRAIN] Modelo Gemini inicializado com sucesso.")
 
-# ----------------------------
+except Exception as e:
+    print(f"❌ Erro Fatal Brain Init: {e}")
+
 
 def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=None):
-    print(f"🧠 [CÉREBRO] User {user_id} ({user_name}): {user_text}")
+    """Processa texto + arquivo (imagem/audio) usando Gemini."""
+    print(f"🧠 [PROCESS] User: {user_id} | File: {file_path}")
     
+    # --- VERIFICAÇÃO DE SEGURANÇA SE O MODELO FALHOU ---
+    if model is None:
+        return "⚠️ Erro Crítico: O cérebro da IA não foi inicializado. Verifique os logs do servidor (Erro: Model is None)."
+
     creds = load_user_credentials(user_id)
     
+    # Verifica Login e Boas Vindas
     if not creds or not creds.valid or user_text == "/start":
         if not get_user_email(user_id):
             register_user(user_id, "pendente_login")
-
-        render_url = os.getenv("RENDER_EXTERNAL_URL") 
-        if not render_url:
-            return "Erro Técnico: Variável RENDER_EXTERNAL_URL não configurada."
-            
+        
+        render_url = os.getenv("RENDER_EXTERNAL_URL")
+        # Fallback se a variável não estiver definida, para não quebrar o link
+        if not render_url: render_url = "https://seu-app.onrender.com" 
+        
         link_login = f"{render_url}/auth/login?state={user_id}"
         
-        saudacao = f"Prezado(a) <b>{user_name}</b>" if user_name else "Prezado(a) usuário(a)"
-
-        mensagem_boas_vindas = (
-            "<b>Agiliza IA: Sua rotina no piloto automático</b>\n\n"
-            f"{saudacao}, seja bem-vindo(a).\n\n"
-            "Idealizada por <b>Deivlin Vale</b>, esta plataforma foi desenvolvida com um propósito claro: "
-            "eliminar o atrito entre você e a sua produtividade.\n\n"
-            "<b>Como posso auxiliá-lo de fato?</b>\n\n"
-            "• <b>Agenda blindada:</b> Agende reuniões e encontre horários livres.\n"
-            "• <b>Da ideia ao documento:</b> Envie um áudio e eu transformarei sua fala em um Doc.\n"
-            "• <b>Segurança:</b> Utilizo a conexão oficial do Google.\n\n"
-            "Menos burocracia, mais realização. <b>Podemos iniciar?</b>\n\n"
-            "Por favor, acesse o link abaixo para conectar sua conta Google:\n"
-            f"<a href='{link_login}'>CONECTAR AGORA</a>"
+        return (
+            f"Olá <b>{user_name}</b>!\n\n"
+            "Para que eu possa gerenciar sua agenda e criar documentos, "
+            "preciso que você conecte sua conta Google.\n\n"
+            f"👉 <a href='{link_login}'>CLIQUE AQUI PARA CONECTAR</a>"
         )
-        return mensagem_boas_vindas
     
     try:
+        # Histórico do Supabase
         history = get_chat_history(user_id)
         user_email = get_user_email(user_id)
         
+        # Prepara Chat
         chat = model.start_chat(history=history, enable_automatic_function_calling=True)
         
-        contexto_sistema = (
-            f"--- DADOS DE SISTEMA ---\n"
-            f"USER_NAME: {user_name}\n"
-            f"E-mail do Usuário: {user_email}\n"
-            f"SYSTEM_ID: '{user_id}'\n"
-            f"(Ao usar ferramentas, user_id = '{user_id}')\n"
-            f"------------------------"
+        # Monta o prompt do sistema para essa rodada
+        system_context = (
+            f"CONTEXTO DO USUÁRIO:\n"
+            f"- Nome: {user_name}\n"
+            f"- Email: {user_email}\n"
+            f"- ID Sistema: '{user_id}' (Use este ID nas ferramentas)\n"
         )
         
-        inputs = [contexto_sistema]
-
+        # Lista de inputs para o Gemini (Texto + Arquivo se houver)
+        inputs = [system_context]
+        
         if file_path:
-            inputs.append(genai.upload_file(file_path))
+            print(f"📤 Uploading file: {file_path}")
+            uploaded_file = genai.upload_file(file_path)
+            
+            # Espera ativa para garantir que o arquivo foi processado
+            while uploaded_file.state.name == "PROCESSING":
+                time.sleep(2)
+                uploaded_file = genai.get_file(uploaded_file.name)
+                
+            inputs.append(uploaded_file)
+            inputs.append("Analise este arquivo conforme solicitado.")
+
         if user_text:
             inputs.append(user_text)
 
+        # Envia para a IA
         response = chat.send_message(inputs)
         text_response = response.text
         
-        save_message(user_id, "user", user_text or "[Audio]")
+        # Salva apenas o texto no Supabase
+        log_content = f"[Arquivo enviado] {user_text}" if file_path else user_text
+        save_message(user_id, "user", log_content)
         save_message(user_id, "model", text_response)
         
         return text_response
 
     except Exception as e:
-        print(f"❌ Erro Execução: {e}")
-        return "Peço desculpas, erro técnico. Contacte o administrador."
-
-
-
-
+        print(f"❌ Erro Execução AI: {e}")
+        return "Peço desculpas. Ocorreu um erro técnico ao processar sua solicitação."
