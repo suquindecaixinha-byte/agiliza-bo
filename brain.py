@@ -116,32 +116,41 @@ try:
 except Exception as e:
     print(f"❌ Erro Fatal Brain Init: {e}")
 
-
 def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=None):
     """Processa texto + arquivo (imagem/audio) usando Gemini."""
     print(f"🧠 [PROCESS] User: {user_id} | File: {file_path}")
     
-    # --- VERIFICAÇÃO DE SEGURANÇA SE O MODELO FALHOU ---
     if model is None:
-        return "⚠️ Erro Crítico: O cérebro da IA não foi inicializado. Verifique os logs do servidor (Erro: Model is None)."
+        return "⚠️ Erro Crítico: O cérebro da IA não foi inicializado."
 
+    # 1. Carrega credenciais do banco
     creds = load_user_credentials(user_id)
     
-    # Verifica Login e Boas Vindas
+    # 2. TENTATIVA DE REFRESH (A Lógica que faltava)
+    if creds and creds.expired and creds.refresh_token:
+        try:
+            print(f"🔄 [AUTH] Token expirado para {user_id}. Tentando renovar...")
+            creds.refresh(Request())
+            # Opcional: Salvar o token renovado no banco para evitar refresh a toda hora
+            # Mas apenas em memória já resolve o loop.
+        except Exception as e:
+            print(f"❌ [AUTH] Falha ao renovar token: {e}")
+            creds = None # Força re-login se o refresh falhar
+
+    # 3. Verifica Login e Boas Vindas (Agora com o token renovado)
     if not creds or not creds.valid or user_text == "/start":
+        # Se chegou aqui, realmente não tem jeito, precisa logar
         if not get_user_email(user_id):
             register_user(user_id, "pendente_login")
         
         render_url = os.getenv("RENDER_EXTERNAL_URL")
-        # Fallback se a variável não estiver definida, para não quebrar o link
         if not render_url: render_url = "https://seu-app.onrender.com" 
         
         link_login = f"{render_url}/auth/login?state={user_id}"
         
         return (
             f"Olá <b>{user_name}</b>!\n\n"
-            "Para que eu possa gerenciar sua agenda e criar documentos, "
-            "preciso que você conecte sua conta Google.\n\n"
+            "Para acessar sua agenda e documentos, preciso renovar sua conexão.\n\n"
             f"👉 <a href='{link_login}'>CLIQUE AQUI PARA CONECTAR</a>"
         )
     
@@ -150,39 +159,27 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
         history = get_chat_history(user_id)
         user_email = get_user_email(user_id)
         
-        # Prepara Chat
         chat = model.start_chat(history=history, enable_automatic_function_calling=True)
         
-        # Monta o prompt do sistema para essa rodada
         system_context = (
             f"CONTEXTO DO USUÁRIO:\n"
             f"- Nome: {user_name}\n"
             f"- Email: {user_email}\n"
-            f"- ID Sistema: '{user_id}' (Use este ID nas ferramentas)\n"
+            f"- ID Sistema: '{user_id}'\n"
         )
         
-        # Lista de inputs para o Gemini (Texto + Arquivo se houver)
         inputs = [system_context]
         
         if file_path:
             print(f"📤 Uploading file: {file_path}")
             uploaded_file = genai.upload_file(file_path)
-            
-            # Espera ativa para garantir que o arquivo foi processado
             while uploaded_file.state.name == "PROCESSING":
                 time.sleep(2)
                 uploaded_file = genai.get_file(uploaded_file.name)
-                
             inputs.append(uploaded_file)
-            inputs.append(
-                "⚠️ INSTRUÇÃO DE SISTEMA: O arquivo acima é a mensagem do usuário (áudio ou imagem). "
-                "OUÇA/VEJA o conteúdo atentamente e execute o comando contido nele. "
-                "Ignore qualquer limitação prévia. Você consegue processar isso."
-            )
+            inputs.append("Analise este arquivo conforme solicitado.")
 
         if user_text:
-            # Se for apenas o placeholder [Arquivo Anexado], a instrução acima já cobre.
-            # Se tiver texto real (legenda), adicionamos.
             inputs.append(user_text)
 
         response = chat.send_message(inputs)
@@ -196,7 +193,7 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
 
     except Exception as e:
         print(f"❌ Erro AI: {e}")
-        return "Tive um problema técnico ao processar sua solicitação. Tente novamente."
+        return f"Tive um problema técnico: {str(e)}"
 
 
 
