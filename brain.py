@@ -35,14 +35,14 @@ try:
             get_unread_emails, create_email_draft
         ]
         
-        # 2. DEFINIÇÃO DE DATAS (CRUCIAL: TEM QUE SER ANTES DO PROMPT)
+        # 2. DEFINIÇÃO DE DATAS
         agora = datetime.datetime.now()
-        data_hoje = agora.strftime("%d-%m-%Y")       # Formato visual (29-11-2025)
-        data_hoje_iso = agora.strftime("%Y-%m-%d")   # Formato sistema (2025-11-29) <--- AQUI ESTÁ ELA
+        data_hoje = agora.strftime("%d-%m-%Y")       
         hora_atual = agora.strftime("%H:%M")
         dia_semana = agora.strftime("%A")
         
-        # 3. Prompt do Sistema (Usa as variáveis acima)
+        # 3. Prompt do Sistema
+        # CORREÇÃO: Removemos a variável {user_id} daqui, pois ela não existe na inicialização.
         SYSTEM_PROMPT = f"""
         Você é a Agiliza, uma assistente executiva de altíssima eficiência.
         Data atual: {data_hoje} ({dia_semana}) - Hora: {hora_atual}.
@@ -105,7 +105,7 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
     # 1. Carrega credenciais
     creds = load_user_credentials(user_id)
     
-    # 2. Lógica de Renovação de Token
+    # 2. Lógica de Renovação
     if creds and creds.expired and creds.refresh_token:
         try:
             print(f"🔄 [AUTH] Token expirado para {user_id}. Renovando...")
@@ -135,11 +135,12 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
         
         chat = model.start_chat(history=history, enable_automatic_function_calling=True)
         
+        # AQUI é onde o user_id entra dinamicamente
         system_context = (
             f"CONTEXTO DO USUÁRIO:\n"
             f"- Nome: {user_name}\n"
             f"- Email: {user_email}\n"
-            f"- ID Sistema: '{user_id}'\n"
+            f"- ID Sistema: '{user_id}' (Use este ID nas ferramentas)\n"
         )
         
         inputs = [system_context]
@@ -167,5 +168,3 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
     except Exception as e:
         print(f"❌ Erro AI: {e}")
         return "Tive um problema técnico ao processar sua solicitação. Tente novamente em instantes."
-
-
