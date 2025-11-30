@@ -116,46 +116,40 @@ try:
 except Exception as e:
     print(f"❌ Erro Fatal Brain Init: {e}")
 
+
 def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=None):
-    """Processa texto + arquivo (imagem/audio) usando Gemini."""
     print(f"🧠 [PROCESS] User: {user_id} | File: {file_path}")
     
     if model is None:
         return "⚠️ Erro Crítico: O cérebro da IA não foi inicializado."
 
-    # 1. Carrega credenciais do banco
+    # 1. Carrega credenciais
     creds = load_user_credentials(user_id)
     
-    # 2. TENTATIVA DE REFRESH (A Lógica que faltava)
+    # 2. LÓGICA DE RENOVAÇÃO (O FIX DO LOOP)
     if creds and creds.expired and creds.refresh_token:
         try:
-            print(f"🔄 [AUTH] Token expirado para {user_id}. Tentando renovar...")
+            print(f"🔄 [AUTH] Token expirado para {user_id}. Renovando...")
             creds.refresh(Request())
-            # Opcional: Salvar o token renovado no banco para evitar refresh a toda hora
-            # Mas apenas em memória já resolve o loop.
         except Exception as e:
-            print(f"❌ [AUTH] Falha ao renovar token: {e}")
-            creds = None # Força re-login se o refresh falhar
+            print(f"❌ [AUTH] Falha ao renovar: {e}")
+            creds = None # Força novo login se falhar
 
-    # 3. Verifica Login e Boas Vindas (Agora com o token renovado)
+    # 3. Verifica se está válido (agora que tentamos renovar)
     if not creds or not creds.valid or user_text == "/start":
-        # Se chegou aqui, realmente não tem jeito, precisa logar
         if not get_user_email(user_id):
             register_user(user_id, "pendente_login")
         
-        render_url = os.getenv("RENDER_EXTERNAL_URL")
-        if not render_url: render_url = "https://seu-app.onrender.com" 
-        
+        render_url = os.getenv("RENDER_EXTERNAL_URL", "https://seu-app.onrender.com")
         link_login = f"{render_url}/auth/login?state={user_id}"
         
         return (
             f"Olá <b>{user_name}</b>!\n\n"
-            "Para acessar sua agenda e documentos, preciso renovar sua conexão.\n\n"
+            "Preciso atualizar sua conexão com o Google para continuar.\n\n"
             f"👉 <a href='{link_login}'>CLIQUE AQUI PARA CONECTAR</a>"
         )
     
     try:
-        # Histórico do Supabase
         history = get_chat_history(user_id)
         user_email = get_user_email(user_id)
         
@@ -171,13 +165,12 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
         inputs = [system_context]
         
         if file_path:
-            print(f"📤 Uploading file: {file_path}")
             uploaded_file = genai.upload_file(file_path)
             while uploaded_file.state.name == "PROCESSING":
-                time.sleep(2)
+                time.sleep(1)
                 uploaded_file = genai.get_file(uploaded_file.name)
             inputs.append(uploaded_file)
-            inputs.append("Analise este arquivo conforme solicitado.")
+            inputs.append("Analise este arquivo.")
 
         if user_text:
             inputs.append(user_text)
@@ -193,9 +186,4 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
 
     except Exception as e:
         print(f"❌ Erro AI: {e}")
-        return f"Tive um problema técnico: {str(e)}"
-
-
-
-
-
+        return "Tive um problema técnico. Tente novamente."
