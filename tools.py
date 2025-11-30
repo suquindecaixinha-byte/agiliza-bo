@@ -25,14 +25,9 @@ def get_service(user_id, api_name, version):
             
     return build(api_name, version, credentials=creds)
 
-# --- 1. AGENDA: LISTAR, CRIAR, DELETAR, ATUALIZAR ---
+# --- 1. AGENDA ---
 
 def list_calendar_events(user_id: str, date_str: str = None, days: int = 1):
-    """
-    Lista eventos.
-    - date_str: Data inicial (YYYY-MM-DD). Se vazio, usa hoje.
-    - days: Quantos dias listar a partir da data inicial.
-    """
     service = get_service(user_id, 'calendar', 'v3')
     if not service: return "ERRO: Falha de autenticação."
 
@@ -40,7 +35,6 @@ def list_calendar_events(user_id: str, date_str: str = None, days: int = 1):
         date_str = datetime.datetime.now().strftime("%Y-%m-%d")
         
     try:
-        # Calcula intervalo de tempo com base em 'days'
         dt_start = datetime.datetime.strptime(date_str, "%Y-%m-%d")
         dt_end = dt_start + datetime.timedelta(days=days)
         
@@ -69,8 +63,6 @@ def list_calendar_events(user_id: str, date_str: str = None, days: int = 1):
             
             summary = event.get('summary', 'Sem título')
             start = event['start'].get('dateTime', event['start'].get('date'))
-            
-            # Formatação limpa
             data_evento = start[:10]
             hora_evento = start[11:16] if 'T' in start else "Dia todo"
             
@@ -82,11 +74,9 @@ def list_calendar_events(user_id: str, date_str: str = None, days: int = 1):
         return f"Erro ao ler agenda: {str(e)}"
 
 def create_calendar_event(summary: str, start_datetime: str, user_id: str, end_datetime: str = None, attendees_emails: list[str] = None, description: str = None):
-    """Cria evento na agenda."""
     service = get_service(user_id, 'calendar', 'v3')
     if not service: return "ERRO: Falha de autenticação."
 
-    # Lógica de Horário
     if not end_datetime:
         try:
             dt = datetime.datetime.fromisoformat(start_datetime)
@@ -100,8 +90,7 @@ def create_calendar_event(summary: str, start_datetime: str, user_id: str, end_d
         'end': {'dateTime': end_datetime, 'timeZone': 'America/Sao_Paulo'}
     }
 
-    if description:
-        event_body['description'] = description
+    if description: event_body['description'] = description
 
     if attendees_emails:
         valid_attendees = []
@@ -114,12 +103,12 @@ def create_calendar_event(summary: str, start_datetime: str, user_id: str, end_d
     try:
         event = service.events().insert(calendarId='primary', body=event_body).execute()
         link = event.get('htmlLink')
-        return f"Sucesso! Evento '{summary}' criado. Link: {link}"
+        # RETORNO COM LINK EXPLÍCITO
+        return f"✅ Evento Criado: '{summary}'\n🔗 Link: {link}"
     except Exception as e:
         return f"Erro do Google Agenda: {str(e)}"
 
 def delete_calendar_event(user_id: str, event_id: str):
-    """Remove um evento pelo ID."""
     service = get_service(user_id, 'calendar', 'v3')
     try:
         service.events().delete(calendarId='primary', eventId=event_id).execute()
@@ -128,29 +117,25 @@ def delete_calendar_event(user_id: str, event_id: str):
         return f"Erro ao deletar: {e}"
 
 def update_calendar_event(user_id: str, event_id: str, new_summary: str = None, new_start_time: str = None):
-    """Atualiza título ou horário de um evento."""
     service = get_service(user_id, 'calendar', 'v3')
-    
     event_patch = {}
-    if new_summary:
-        event_patch['summary'] = new_summary
-        
+    if new_summary: event_patch['summary'] = new_summary
     if new_start_time:
         try:
             dt = datetime.datetime.fromisoformat(new_start_time)
             end_time = (dt + datetime.timedelta(hours=1)).isoformat()
             event_patch['start'] = {'dateTime': new_start_time, 'timeZone': 'America/Sao_Paulo'}
             event_patch['end'] = {'dateTime': end_time, 'timeZone': 'America/Sao_Paulo'}
-        except:
-            return "Erro: Data inválida."
+        except: return "Erro: Data inválida."
 
     try:
-        service.events().patch(calendarId='primary', eventId=event_id, body=event_patch).execute()
-        return "Evento atualizado."
+        event = service.events().patch(calendarId='primary', eventId=event_id, body=event_patch).execute()
+        link = event.get('htmlLink')
+        return f"✅ Evento Atualizado.\n🔗 Link: {link}"
     except Exception as e:
         return f"Erro ao atualizar: {e}"
 
-# --- 2. DOCS: CRIAR E LER ---
+# --- 2. DOCS ---
 
 def create_google_doc(title: str, content: str, user_id: str):
     docs_service = get_service(user_id, 'docs', 'v1')
@@ -161,13 +146,14 @@ def create_google_doc(title: str, content: str, user_id: str):
         doc_id = doc.get('documentId')
         requests = [{'insertText': {'location': {'index': 1}, 'text': content}}]
         docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': requests}).execute()
+        
         link = f"https://docs.google.com/document/d/{doc_id}"
-        return f"Documento criado: {link}"
+        # RETORNO COM LINK EXPLÍCITO
+        return f"✅ Documento Criado: '{title}'\n🔗 Link: {link}"
     except Exception as e:
         return f"Erro Doc: {str(e)}"
 
 def read_google_doc(user_id: str, doc_id: str):
-    """Lê o texto completo de um Google Doc."""
     service = get_service(user_id, 'docs', 'v1')
     try:
         doc = service.documents().get(documentId=doc_id).execute()
@@ -182,7 +168,7 @@ def read_google_doc(user_id: str, doc_id: str):
     except Exception as e:
         return f"Erro ao ler doc: {e}"
 
-# --- 3. DRIVE: BUSCAR ARQUIVO ---
+# --- 3. DRIVE ---
 
 def search_drive_file(user_id: str, query_name: str):
     service = get_service(user_id, 'drive', 'v3')
@@ -195,7 +181,7 @@ def search_drive_file(user_id: str, query_name: str):
 
         resp = "Arquivos encontrados:\n"
         for item in items:
-            resp += f"- {item['name']} (ID: {item['id']})\n  Link: {item['webViewLink']}\n"
+            resp += f"- {item['name']}\n  🔗 Link: {item['webViewLink']}\n"
         return resp
     except Exception as e:
         return f"Erro Drive: {e}"
@@ -207,7 +193,11 @@ def create_task(user_id: str, title: str, notes: str = None):
     try:
         body = {'title': title, 'notes': notes}
         task = service.tasks().insert(tasklist='@default', body=body).execute()
-        return f"Tarefa criada: {task['title']}"
+        
+        # Google Tasks API não retorna link direto para a task individual, mas damos o link do app
+        link_geral = "https://tasks.google.com/embed/?origin=https://mail.google.com"
+        
+        return f"✅ Tarefa Criada: {task['title']}\n🔗 Ver Lista: {link_geral}"
     except Exception as e:
         return f"Erro Tasks: {e}"
 
@@ -241,7 +231,10 @@ def get_unread_emails(user_id: str):
             headers = m['payload']['headers']
             subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'Sem Assunto')
             sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Desconhecido')
-            resp += f"- De: {sender} | Assunto: {subject}\n"
+            
+            # Cria um link direto para abrir esse email
+            link_email = f"https://mail.google.com/mail/u/0/#inbox/{msg['id']}"
+            resp += f"- De: {sender} | Assunto: {subject}\n  🔗 Ler: {link_email}\n"
         return resp
     except Exception as e:
         return f"Erro Gmail: {e}"
@@ -258,6 +251,10 @@ def create_email_draft(user_id: str, to: str, subject: str, body_text: str):
         create_message = {'message': {'raw': encoded_message}}
         
         draft = service.users().drafts().create(userId='me', body=create_message).execute()
-        return f"Rascunho criado com sucesso! ID: {draft['id']} (Verifique seu Gmail)"
+        
+        # Link para a pasta de Rascunhos
+        link_drafts = "https://mail.google.com/mail/u/0/#drafts"
+        
+        return f"✅ Rascunho Criado! (ID: {draft['id']})\n🔗 Abrir Rascunhos: {link_drafts}"
     except Exception as e:
         return f"Erro ao criar rascunho: {e}"
