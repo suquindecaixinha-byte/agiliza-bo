@@ -67,7 +67,7 @@ def list_calendar_events(user_id: str, date_str: str = None, days: int = 1):
             
             # Links
             link_cal = event.get('htmlLink', '')
-            link_meet = event.get('hangoutLink', '') # Pega link do Meet se houver
+            link_meet = event.get('hangoutLink', '') 
             
             data_evento = start[:10]
             hora_evento = start[11:16] if 'T' in start else "Dia todo"
@@ -171,3 +171,99 @@ def create_google_doc(title: str, content: str, user_id: str):
 
 def read_google_doc(user_id: str, doc_id: str):
     service = get_service(user_id, 'docs', 'v1')
+    try:
+        doc = service.documents().get(documentId=doc_id).execute()
+        content = doc.get('body').get('content')
+        full_text = ""
+        for element in content:
+            if 'paragraph' in element:
+                elements = element.get('paragraph').get('elements')
+                for elem in elements:
+                    full_text += elem.get('textRun', {}).get('content', '')
+        return f"Conteúdo do Doc:\n{full_text[:3000]}..."
+    except Exception as e:
+        return f"Erro ao ler doc: {e}"
+
+# --- 3. DRIVE (ESSA FUNÇÃO ESTAVA FALTANDO OU QUEBRADA) ---
+
+def search_drive_file(user_id: str, query_name: str):
+    service = get_service(user_id, 'drive', 'v3')
+    try:
+        q = f"name contains '{query_name}' and trashed = false"
+        results = service.files().list(q=q, pageSize=5, fields="files(id, name, webViewLink)").execute()
+        items = results.get('files', [])
+
+        if not items: return f"Nenhum arquivo encontrado com nome '{query_name}'."
+
+        resp = "Arquivos encontrados:\n"
+        for item in items:
+            resp += f"- {item['name']}\n  🔗 Link: {item['webViewLink']}\n"
+        return resp
+    except Exception as e:
+        return f"Erro Drive: {e}"
+
+# --- 4. TASKS ---
+
+def create_task(user_id: str, title: str, notes: str = None):
+    service = get_service(user_id, 'tasks', 'v1')
+    try:
+        body = {'title': title, 'notes': notes}
+        task = service.tasks().insert(tasklist='@default', body=body).execute()
+        link_geral = "https://tasks.google.com/embed/?origin=https://mail.google.com"
+        return f"✅ Tarefa Criada: {task['title']}\n🔗 Ver Lista: {link_geral}"
+    except Exception as e:
+        return f"Erro Tasks: {e}"
+
+def list_tasks(user_id: str):
+    service = get_service(user_id, 'tasks', 'v1')
+    try:
+        results = service.tasks().list(tasklist='@default', showCompleted=False, maxResults=10).execute()
+        items = results.get('items', [])
+        if not items: return "Nenhuma tarefa pendente."
+        
+        resp = "Minhas Tarefas:\n"
+        for item in items:
+            resp += f"☐ {item['title']}\n"
+        return resp
+    except Exception as e:
+        return f"Erro Tasks: {e}"
+
+# --- 5. GMAIL ---
+
+def get_unread_emails(user_id: str):
+    service = get_service(user_id, 'gmail', 'v1')
+    try:
+        results = service.users().messages().list(userId='me', q='is:unread', maxResults=5).execute()
+        messages = results.get('messages', [])
+        
+        if not messages: return "Você não tem novos emails."
+
+        resp = "📩 Últimos emails não lidos:\n"
+        for msg in messages:
+            m = service.users().messages().get(userId='me', id=msg['id'], format='metadata').execute()
+            headers = m['payload']['headers']
+            subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'Sem Assunto')
+            sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Desconhecido')
+            link_email = f"https://mail.google.com/mail/u/0/#inbox/{msg['id']}"
+            resp += f"- De: {sender} | Assunto: {subject}\n  🔗 Ler: {link_email}\n"
+        return resp
+    except Exception as e:
+        return f"Erro Gmail: {e}"
+
+def create_email_draft(user_id: str, to: str, subject: str, body_text: str):
+    service = get_service(user_id, 'gmail', 'v1')
+    try:
+        message = EmailMessage()
+        message.set_content(body_text)
+        message['To'] = to
+        message['Subject'] = subject
+
+        encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        create_message = {'message': {'raw': encoded_message}}
+        
+        draft = service.users().drafts().create(userId='me', body=create_message).execute()
+        link_drafts = "https://mail.google.com/mail/u/0/#drafts"
+        
+        return f"✅ Rascunho Criado! (ID: {draft['id']})\n🔗 Abrir Rascunhos: {link_drafts}"
+    except Exception as e:
+        return f"Erro ao criar rascunho: {e}"
