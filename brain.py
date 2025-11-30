@@ -94,7 +94,9 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
 
     creds = load_user_credentials(user_id)
     
-    # Verifica Login
+   # ... (dentro de brain.py)
+    
+    # Verifica Login e Boas Vindas
     if not creds or not creds.valid or user_text == "/start":
         if not get_user_email(user_id):
             register_user(user_id, "pendente_login")
@@ -105,8 +107,10 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
         link_login = f"{render_url}/auth/login?state={user_id}"
         
         return (
-            f"Olá <b>{user_name}</b>!\n\n"
-            "Para gerenciar sua agenda, conecte sua conta Google.\n\n"
+            f"Olá, <b>{user_name}</b>!\n\n"
+            "Sou a <b>Agiliza</b>, sua IA que serve como <i>assistente pessoal</i>.\n\n"
+            "Desenvolvida por <b>Deivlin Vale</b>, essa ferramenta permite te desafogar de processos burocráticos <i>(e um pouquinho chatos)</i> do dia a dia.\n\n"
+            "Para começarmos, preciso que você conecte com a sua conta do Google:\n\n"
             f"👉 <a href='{link_login}'>CLIQUE AQUI PARA CONECTAR</a>"
         )
     
@@ -151,3 +155,4 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
     except Exception as e:
         print(f"❌ Erro AI: {e}")
         return "Tive um problema técnico ao processar sua solicitação. Tente novamente."
+
