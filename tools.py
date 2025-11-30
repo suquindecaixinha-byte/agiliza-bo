@@ -6,12 +6,19 @@ from google.auth.transport.requests import Request
 from auth import load_user_credentials
 
 def get_service(user_id, api_name, version):
+    """Autentica e retorna o serviço do Google, renovando o token se necessário."""
     if not user_id or user_id in ["user_id", "SYSTEM_ID"]: return None
+    
     creds = load_user_credentials(user_id)
     if not creds: return None
+    
+    # Renovação automática aqui também para segurança
     if creds.expired and creds.refresh_token:
-        try: creds.refresh(Request())
-        except: return None
+        try:
+            creds.refresh(Request())
+        except:
+            return None
+            
     return build(api_name, version, credentials=creds)
 
 # --- AGENDA ---
@@ -26,12 +33,19 @@ def list_calendar_events(user_id: str, date_str: str = None, days: int = 1):
         start_iso = f"{date_str}T00:00:00-03:00"
         end_iso = f"{end_dt.strftime('%Y-%m-%d')}T23:59:59-03:00"
 
-        events = service.events().list(calendarId='primary', timeMin=start_iso, timeMax=end_iso, singleEvents=True, orderBy='startTime').execute().get('items', [])
+        events_result = service.events().list(
+            calendarId='primary', timeMin=start_iso, timeMax=end_iso, 
+            singleEvents=True, orderBy='startTime'
+        ).execute()
+        events = events_result.get('items', [])
         
         if not events: return f"Agenda livre."
         
         resp = f"📅 Agenda:\n"
+        seen = set()
         for ev in events:
+            if ev['id'] in seen: continue
+            seen.add(ev['id'])
             start = ev['start'].get('dateTime', ev['start'].get('date'))
             time_str = start[11:16] if 'T' in start else "Dia todo"
             resp += f"- {time_str}: {ev.get('summary', 'Sem título')} (ID: {ev['id']})\n"
