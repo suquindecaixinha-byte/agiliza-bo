@@ -28,6 +28,7 @@ def get_service(user_id, api_name, version):
 # --- 1. AGENDA ---
 
 def list_calendar_events(user_id: str, date_str: str = None, days: int = 1):
+    """Lista eventos trazendo links do Calendar e do Meet."""
     service = get_service(user_id, 'calendar', 'v3')
     if not service: return "ERRO: Falha de autenticação."
 
@@ -63,10 +64,20 @@ def list_calendar_events(user_id: str, date_str: str = None, days: int = 1):
             
             summary = event.get('summary', 'Sem título')
             start = event['start'].get('dateTime', event['start'].get('date'))
+            
+            # Links
+            link_cal = event.get('htmlLink', '')
+            link_meet = event.get('hangoutLink', '') # Pega link do Meet se houver
+            
             data_evento = start[:10]
             hora_evento = start[11:16] if 'T' in start else "Dia todo"
             
-            agenda_str += f"- [{data_evento} às {hora_evento}] {summary} (ID: {event_id})\n"
+            agenda_str += f"- [{data_evento} às {hora_evento}] {summary}\n"
+            
+            if link_meet:
+                agenda_str += f"  📹 Meet: {link_meet}\n"
+            if link_cal:
+                agenda_str += f"  📅 Detalhes: {link_cal}\n"
             
         return agenda_str
 
@@ -87,7 +98,10 @@ def create_calendar_event(summary: str, start_datetime: str, user_id: str, end_d
     event_body = {
         'summary': summary,
         'start': {'dateTime': start_datetime, 'timeZone': 'America/Sao_Paulo'},
-        'end': {'dateTime': end_datetime, 'timeZone': 'America/Sao_Paulo'}
+        'end': {'dateTime': end_datetime, 'timeZone': 'America/Sao_Paulo'},
+        'conferenceData': {
+            'createRequest': {'requestId': f"sample{datetime.datetime.now().timestamp()}", 'conferenceSolutionKey': {'type': 'hangoutsMeet'}}
+        }
     }
 
     if description: event_body['description'] = description
@@ -101,10 +115,13 @@ def create_calendar_event(summary: str, start_datetime: str, user_id: str, end_d
             event_body['attendees'] = valid_attendees
 
     try:
-        event = service.events().insert(calendarId='primary', body=event_body).execute()
-        link = event.get('htmlLink')
-        # RETORNO COM LINK EXPLÍCITO
-        return f"✅ Evento Criado: '{summary}'\n🔗 Link: {link}"
+        # conferenceDataVersion=1 é obrigatório para criar link do Meet automático
+        event = service.events().insert(calendarId='primary', body=event_body, conferenceDataVersion=1).execute()
+        
+        link_cal = event.get('htmlLink')
+        link_meet = event.get('hangoutLink', 'Sem link do Meet')
+        
+        return f"✅ Evento Criado: '{summary}'\n📅 Agenda: {link_cal}\n📹 Meet: {link_meet}"
     except Exception as e:
         return f"Erro do Google Agenda: {str(e)}"
 
@@ -148,113 +165,9 @@ def create_google_doc(title: str, content: str, user_id: str):
         docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': requests}).execute()
         
         link = f"https://docs.google.com/document/d/{doc_id}"
-        # RETORNO COM LINK EXPLÍCITO
         return f"✅ Documento Criado: '{title}'\n🔗 Link: {link}"
     except Exception as e:
         return f"Erro Doc: {str(e)}"
 
 def read_google_doc(user_id: str, doc_id: str):
     service = get_service(user_id, 'docs', 'v1')
-    try:
-        doc = service.documents().get(documentId=doc_id).execute()
-        content = doc.get('body').get('content')
-        full_text = ""
-        for element in content:
-            if 'paragraph' in element:
-                elements = element.get('paragraph').get('elements')
-                for elem in elements:
-                    full_text += elem.get('textRun', {}).get('content', '')
-        return f"Conteúdo do Doc:\n{full_text[:3000]}..."
-    except Exception as e:
-        return f"Erro ao ler doc: {e}"
-
-# --- 3. DRIVE ---
-
-def search_drive_file(user_id: str, query_name: str):
-    service = get_service(user_id, 'drive', 'v3')
-    try:
-        q = f"name contains '{query_name}' and trashed = false"
-        results = service.files().list(q=q, pageSize=5, fields="files(id, name, webViewLink)").execute()
-        items = results.get('files', [])
-
-        if not items: return f"Nenhum arquivo encontrado com nome '{query_name}'."
-
-        resp = "Arquivos encontrados:\n"
-        for item in items:
-            resp += f"- {item['name']}\n  🔗 Link: {item['webViewLink']}\n"
-        return resp
-    except Exception as e:
-        return f"Erro Drive: {e}"
-
-# --- 4. TASKS ---
-
-def create_task(user_id: str, title: str, notes: str = None):
-    service = get_service(user_id, 'tasks', 'v1')
-    try:
-        body = {'title': title, 'notes': notes}
-        task = service.tasks().insert(tasklist='@default', body=body).execute()
-        
-        # Google Tasks API não retorna link direto para a task individual, mas damos o link do app
-        link_geral = "https://tasks.google.com/embed/?origin=https://mail.google.com"
-        
-        return f"✅ Tarefa Criada: {task['title']}\n🔗 Ver Lista: {link_geral}"
-    except Exception as e:
-        return f"Erro Tasks: {e}"
-
-def list_tasks(user_id: str):
-    service = get_service(user_id, 'tasks', 'v1')
-    try:
-        results = service.tasks().list(tasklist='@default', showCompleted=False, maxResults=10).execute()
-        items = results.get('items', [])
-        if not items: return "Nenhuma tarefa pendente."
-        
-        resp = "Minhas Tarefas:\n"
-        for item in items:
-            resp += f"☐ {item['title']}\n"
-        return resp
-    except Exception as e:
-        return f"Erro Tasks: {e}"
-
-# --- 5. GMAIL ---
-
-def get_unread_emails(user_id: str):
-    service = get_service(user_id, 'gmail', 'v1')
-    try:
-        results = service.users().messages().list(userId='me', q='is:unread', maxResults=5).execute()
-        messages = results.get('messages', [])
-        
-        if not messages: return "Você não tem novos emails."
-
-        resp = "📩 Últimos emails não lidos:\n"
-        for msg in messages:
-            m = service.users().messages().get(userId='me', id=msg['id'], format='metadata').execute()
-            headers = m['payload']['headers']
-            subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'Sem Assunto')
-            sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Desconhecido')
-            
-            # Cria um link direto para abrir esse email
-            link_email = f"https://mail.google.com/mail/u/0/#inbox/{msg['id']}"
-            resp += f"- De: {sender} | Assunto: {subject}\n  🔗 Ler: {link_email}\n"
-        return resp
-    except Exception as e:
-        return f"Erro Gmail: {e}"
-
-def create_email_draft(user_id: str, to: str, subject: str, body_text: str):
-    service = get_service(user_id, 'gmail', 'v1')
-    try:
-        message = EmailMessage()
-        message.set_content(body_text)
-        message['To'] = to
-        message['Subject'] = subject
-
-        encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
-        create_message = {'message': {'raw': encoded_message}}
-        
-        draft = service.users().drafts().create(userId='me', body=create_message).execute()
-        
-        # Link para a pasta de Rascunhos
-        link_drafts = "https://mail.google.com/mail/u/0/#drafts"
-        
-        return f"✅ Rascunho Criado! (ID: {draft['id']})\n🔗 Abrir Rascunhos: {link_drafts}"
-    except Exception as e:
-        return f"Erro ao criar rascunho: {e}"
