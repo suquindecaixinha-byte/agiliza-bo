@@ -1,5 +1,5 @@
-from google.auth.transport.requests import Request  # <--- ADICIONE ISSO
 import google.generativeai as genai
+from google.auth.transport.requests import Request
 from tools import (
     create_calendar_event, list_calendar_events, delete_calendar_event, update_calendar_event,
     create_google_doc, read_google_doc,
@@ -26,7 +26,7 @@ try:
     else:
         genai.configure(api_key=api_key)
 
-        # --- DEFINIÇÃO DAS FERRAMENTAS (INDENTAÇÃO CORRIGIDA) ---
+        # --- DEFINIÇÃO DAS FERRAMENTAS ---
         tools_config = [
             create_calendar_event, list_calendar_events, delete_calendar_event, update_calendar_event,
             create_google_doc, read_google_doc,
@@ -37,8 +37,7 @@ try:
         
         # --- DEFINIÇÃO DE DATAS ---
         agora = datetime.datetime.now()
-        data_hoje = agora.strftime("%d-%m-%Y")       # Formato visual (29-11-2025)
-        data_hoje_iso = agora.strftime("%Y-%m-%d")   # Formato sistema (2025-11-29)
+        data_hoje = agora.strftime("%d-%m-%Y")       
         hora_atual = agora.strftime("%H:%M")
         dia_semana = agora.strftime("%A")
         
@@ -126,16 +125,17 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
     # 1. Carrega credenciais
     creds = load_user_credentials(user_id)
     
-    # 2. LÓGICA DE RENOVAÇÃO (O FIX DO LOOP)
+    # 2. LÓGICA DE RENOVAÇÃO (CORREÇÃO DO LOOP)
+    # Se existe credencial, mas expirou, e temos o token de atualização: RENOVAR.
     if creds and creds.expired and creds.refresh_token:
         try:
             print(f"🔄 [AUTH] Token expirado para {user_id}. Renovando...")
             creds.refresh(Request())
         except Exception as e:
-            print(f"❌ [AUTH] Falha ao renovar: {e}")
-            creds = None # Força novo login se falhar
+            print(f"❌ [AUTH] Falha ao renovar token: {e}")
+            creds = None # Força re-login apenas se a renovação falhar
 
-    # 3. Verifica se está válido (agora que tentamos renovar)
+    # 3. Verifica Validade (Se não tem creds ou se a renovação falhou)
     if not creds or not creds.valid or user_text == "/start":
         if not get_user_email(user_id):
             register_user(user_id, "pendente_login")
@@ -145,11 +145,12 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
         
         return (
             f"Olá <b>{user_name}</b>!\n\n"
-            "Preciso atualizar sua conexão com o Google para continuar.\n\n"
+            "Preciso conectar ou atualizar sua conta Google para continuar.\n\n"
             f"👉 <a href='{link_login}'>CLIQUE AQUI PARA CONECTAR</a>"
         )
     
     try:
+        # Histórico e Contexto
         history = get_chat_history(user_id)
         user_email = get_user_email(user_id)
         
@@ -164,13 +165,16 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
         
         inputs = [system_context]
         
+        # Upload de arquivo se houver
         if file_path:
+            print(f"📤 Uploading file: {file_path}")
             uploaded_file = genai.upload_file(file_path)
+            # Espera processamento
             while uploaded_file.state.name == "PROCESSING":
                 time.sleep(1)
                 uploaded_file = genai.get_file(uploaded_file.name)
             inputs.append(uploaded_file)
-            inputs.append("Analise este arquivo.")
+            inputs.append("Analise este arquivo conforme solicitado.")
 
         if user_text:
             inputs.append(user_text)
@@ -178,6 +182,7 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
         response = chat.send_message(inputs)
         text_response = response.text
         
+        # Salva na memória
         log_content = f"[Arquivo] {user_text}" if file_path else user_text
         save_message(user_id, "user", log_content)
         save_message(user_id, "model", text_response)
@@ -186,4 +191,4 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
 
     except Exception as e:
         print(f"❌ Erro AI: {e}")
-        return "Tive um problema técnico. Tente novamente."
+        return "Tive um problema técnico ao processar sua solicitação. Tente novamente em instantes."
