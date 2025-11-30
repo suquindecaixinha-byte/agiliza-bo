@@ -26,7 +26,7 @@ try:
     else:
         genai.configure(api_key=api_key)
 
-        # --- DEFINIÇÃO DAS FERRAMENTAS ---
+        # 1. Definição das Ferramentas
         tools_config = [
             create_calendar_event, list_calendar_events, delete_calendar_event, update_calendar_event,
             create_google_doc, read_google_doc,
@@ -35,13 +35,14 @@ try:
             get_unread_emails, create_email_draft
         ]
         
-        # --- DEFINIÇÃO DE DATAS ---
+        # 2. DEFINIÇÃO DE DATAS (CRUCIAL: TEM QUE SER ANTES DO PROMPT)
         agora = datetime.datetime.now()
-        data_hoje = agora.strftime("%d-%m-%Y")       
+        data_hoje = agora.strftime("%d-%m-%Y")       # Formato visual (29-11-2025)
+        data_hoje_iso = agora.strftime("%Y-%m-%d")   # Formato sistema (2025-11-29) <--- AQUI ESTÁ ELA
         hora_atual = agora.strftime("%H:%M")
         dia_semana = agora.strftime("%A")
         
-        # --- PROMPT DO SISTEMA ---
+        # 3. Prompt do Sistema (Usa as variáveis acima)
         SYSTEM_PROMPT = f"""
         Você é a Agiliza, uma assistente executiva de altíssima eficiência.
         Data atual: {data_hoje} ({dia_semana}) - Hora: {hora_atual}.
@@ -94,6 +95,14 @@ try:
     1. A data interna DEVE ser ISO (YYYY-MM-DDTHH:MM:SS).
     2. Se o usuário pedir "Das 7h às 20h", preencha 'start_datetime' e 'end_datetime'.
     3. Argumento 'user_id' é obrigatório (Use o SYSTEM_ID do contexto).
+    
+    FERRAMENTAS DISPONÍVEIS:
+        1. Agenda: list_calendar_events (ver), create_calendar_event (agendar), delete/update (gerenciar).
+           - REGRA DE OURO: Se pedir "fim de semana", use list_calendar_events com 'days=3'.
+           - Exemplo de uso interno: list_calendar_events(date_str='{data_hoje_iso}', days=3)
+        2. Docs: create_google_doc (criar atas), read_google_doc (ler).
+        3. Drive: search_drive_file (achar arquivos).
+        4. Tasks/Gmail: create_task, create_email_draft, get_unread_emails.
 
     DIRETRIZES DE COMPORTAMENTO:
     1. Regra Email: Use sempre o e-mail do usuário fornecido no contexto para qualquer ação.
@@ -103,7 +112,7 @@ try:
     5. Regra Formatação: Utilize quebras de linha frequentes para garantir a plena visualização das informações. Use negrito e itálico estrategicamente para destacar termos cruciais.
     6. Regra de Falha: Caso uma função solicitada não esteja disponível ou falhe, peça desculpas formalmente e instrua o usuário a contactar o administrador da IA.
     7. Regra: Utilize com parcimônia o primeiro nome da pessoa quando for da uma resposta.
-    """
+        """
         
         model = genai.GenerativeModel(
             model_name='gemini-2.0-flash-001',
@@ -125,17 +134,16 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
     # 1. Carrega credenciais
     creds = load_user_credentials(user_id)
     
-    # 2. LÓGICA DE RENOVAÇÃO (CORREÇÃO DO LOOP)
-    # Se existe credencial, mas expirou, e temos o token de atualização: RENOVAR.
+    # 2. Lógica de Renovação de Token
     if creds and creds.expired and creds.refresh_token:
         try:
             print(f"🔄 [AUTH] Token expirado para {user_id}. Renovando...")
             creds.refresh(Request())
         except Exception as e:
             print(f"❌ [AUTH] Falha ao renovar token: {e}")
-            creds = None # Força re-login apenas se a renovação falhar
+            creds = None 
 
-    # 3. Verifica Validade (Se não tem creds ou se a renovação falhou)
+    # 3. Verifica Validade
     if not creds or not creds.valid or user_text == "/start":
         if not get_user_email(user_id):
             register_user(user_id, "pendente_login")
@@ -165,11 +173,8 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
         
         inputs = [system_context]
         
-        # Upload de arquivo se houver
         if file_path:
-            print(f"📤 Uploading file: {file_path}")
             uploaded_file = genai.upload_file(file_path)
-            # Espera processamento
             while uploaded_file.state.name == "PROCESSING":
                 time.sleep(1)
                 uploaded_file = genai.get_file(uploaded_file.name)
@@ -182,7 +187,6 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
         response = chat.send_message(inputs)
         text_response = response.text
         
-        # Salva na memória
         log_content = f"[Arquivo] {user_text}" if file_path else user_text
         save_message(user_id, "user", log_content)
         save_message(user_id, "model", text_response)
