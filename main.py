@@ -6,7 +6,7 @@ from brain import process_ai_request
 from auth import get_google_auth_flow, save_user_credentials
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
-from memory import register_user, clear_memory
+from memory import register_user 
 
 load_dotenv()
 
@@ -19,7 +19,7 @@ TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 async def send_telegram_message(chat_id, text):
     """Envia mensagem com proteção contra falhas de rede."""
     try:
-       async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             await client.post(f"{TELEGRAM_API_URL}/sendMessage", json={
                 "chat_id": chat_id,
                 "text": text,
@@ -105,7 +105,6 @@ async def callback(request: Request):
         return f"Erro Auth: {str(e)}"
 
 @app.post("/webhook")
-@app.post("/webhook")
 async def telegram_webhook(request: Request):
     try:
         data = await request.json()
@@ -118,13 +117,6 @@ async def telegram_webhook(request: Request):
     chat_id = message["chat"]["id"]
     user_text = message.get("text") or message.get("caption") or ""
     first_name = message.get("from", {}).get("first_name", "")
-
-    # --- NOVO: COMANDO RESET (Deve ficar identado AQUI) ---
-    if user_text == "/reset":
-        clear_memory(str(chat_id))
-        await send_telegram_message(chat_id, "🧹 Memória limpa! Sobre o que quer falar agora?")
-        return {"status": "reset_done"}
-    # -----------------------------------------------------
 
     file_id = None
     if message.get("voice"):       file_id = message["voice"]["file_id"]
@@ -159,6 +151,3 @@ async def telegram_webhook(request: Request):
             os.remove(temp_file)
 
     return {"status": "ok"}
-
-
-
