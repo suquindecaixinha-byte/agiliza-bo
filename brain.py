@@ -84,7 +84,6 @@ try:
         4. INTERAÇÃO: Ocasionalmente, lembre o usuário: "Se estiver corrido, pode me mandar um áudio! :)".
         5. FALHAS: Se uma ferramenta der erro, peça desculpas formalmente e avise o usuário.
         """
-        """
         
         model = genai.GenerativeModel(
             model_name='gemini-2.0-flash-001',
@@ -168,4 +167,5 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
     except Exception as e:
         print(f"❌ Erro AI: {e}")
         return "Tive um problema técnico ao processar sua solicitação. Tente novamente em instantes."
+
 
