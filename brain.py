@@ -1,3 +1,4 @@
+from google.auth.transport.requests import Request  # <--- ADICIONE ISSO
 import google.generativeai as genai
 from tools import (
     create_calendar_event, list_calendar_events, delete_calendar_event, update_calendar_event,
@@ -196,6 +197,7 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
     except Exception as e:
         print(f"❌ Erro AI: {e}")
         return "Tive um problema técnico ao processar sua solicitação. Tente novamente."
+
 
 
 
