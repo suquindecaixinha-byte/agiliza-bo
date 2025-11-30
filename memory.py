@@ -9,29 +9,41 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 supabase = None
+
+print(f"🔌 [MEMORY] Iniciando conexão Supabase...")
+
 if not SUPABASE_URL or not SUPABASE_KEY:
-    print("⚠️ AVISO: Variáveis SUPABASE_URL ou SUPABASE_KEY não encontradas.")
+    print("❌ [MEMORY] ERRO: Variáveis SUPABASE_URL ou SUPABASE_KEY não encontradas no .env")
 else:
     try:
         supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print("✅ [MEMORY] Cliente Supabase criado.")
     except Exception as e:
-        print(f"❌ Erro fatal ao conectar no Supabase: {e}")
+        print(f"❌ [MEMORY] Erro fatal ao conectar no Supabase: {e}")
         supabase = None
 
 # --- FUNÇÕES DE MEMÓRIA (MENSAGENS) ---
 
 def save_message(user_id: str, role: str, content: str):
     """Salva uma mensagem no histórico."""
-    if not supabase: return
+    # Debug para saber se a função foi chamada
+    print(f"💾 [MEMORY] Tentando salvar mensagem de {user_id} ({role})...")
+    
+    if not supabase: 
+        print("❌ [MEMORY] Erro: Cliente Supabase não está conectado. Mensagem perdida.")
+        return
+
     try:
         data = {
             "user_id": str(user_id),
             "role": role, 
             "content": content
         }
-        supabase.table("memory").insert(data).execute()
+        # Tenta inserir e captura resposta
+        response = supabase.table("memory").insert(data).execute()
+        print(f"✅ [MEMORY] Mensagem salva com sucesso! ID: {user_id}")
     except Exception as e:
-        print(f"⚠️ Erro ao salvar memória: {e}")
+        print(f"❌ [MEMORY] Erro ao salvar no banco: {e}")
 
 def get_chat_history(user_id: str, limit=10):
     """Busca as últimas mensagens para contexto."""
@@ -48,20 +60,21 @@ def get_chat_history(user_id: str, limit=10):
         
         formatted_history = []
         for msg in messages:
+            # Proteção contra conteúdo vazio
+            content = msg.get("content") or ""
             formatted_history.append({
                 "role": "user" if msg["role"] == "user" else "model",
-                "parts": [msg["content"]]
+                "parts": [content]
             })
             
         return formatted_history
     except Exception as e:
-        print(f"⚠️ Erro ao buscar memória: {e}")
+        print(f"⚠️ [MEMORY] Erro ao buscar memória: {e}")
         return []
 
-# --- FUNÇÕES DE USUÁRIO (AS QUE ESTAVAM FALTANDO) ---
+# --- FUNÇÕES DE USUÁRIO ---
 
 def get_user_email(user_id: str):
-    """Verifica qual e-mail está atrelado a este usuário."""
     if not supabase: return None
     try:
         response = supabase.table("users").select("email").eq("user_id", str(user_id)).execute()
@@ -73,13 +86,8 @@ def get_user_email(user_id: str):
         return None
 
 def register_user(user_id: str, email: str):
-    """
-    Cadastra ou ATUALIZA um usuário.
-    Crucial para quando o usuário sai de 'pendente_login' para o email real.
-    """
     if not supabase: return
     try:
-        # 'upsert' cria se não existir, ou atualiza se já existir
         data = {"user_id": str(user_id), "email": email}
         supabase.table("users").upsert(data).execute()
         print(f"👤 [USER] Usuário salvo/atualizado: {email}")
