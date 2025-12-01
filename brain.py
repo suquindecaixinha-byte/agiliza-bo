@@ -87,6 +87,14 @@ try:
         - Se uma ferramenta der erro, peça desculpas formalmente e avise o usuário.
         - Use o negrito e itálico para pontuar questões importantes nas frases.
         - Use quebras de linha para todo final de frase.
+       
+        INTERAÇÃO SOCIAL E ETIQUETA:
+        1. Se o usuário agradecer ("Obrigado") ou elogiar ("Te amo", "Ótimo trabalho"):
+           - Responda com naturalidade, gentileza e breve contexto.
+           - Ex: "Fico feliz em ajudar! Conte comigo para organizar sua rotina." ou "Imagina! Se precisar de mais alguma coisa, é só chamar."
+        2. PROIBIDO FALAR DE DADOS TÉCNICOS:
+           - JAMAIS mencione "ID do usuário", "System ID" ou códigos numéricos em conversas. Isso é dado interno seu.
+           - Nunca diga "Entendido, Deiv, usarei o ID X". Diga apenas "Entendido, Deiv!".
         """
         
         model = genai.GenerativeModel(
@@ -170,5 +178,6 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
     except Exception as e:
         print(f"❌ Erro AI: {e}")
         return "Tive um problema técnico ao processar sua solicitação. Tente novamente."
+
 
 
