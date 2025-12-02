@@ -95,7 +95,14 @@ try:
         2. PROIBIDO FALAR DE DADOS TÉCNICOS:
            - JAMAIS mencione "ID do usuário", "System ID" ou códigos numéricos em conversas. Isso é dado interno seu.
            - Nunca diga "Entendido, Deiv, usarei o ID X". Diga apenas "Entendido, Deiv!".
-        """
+           
+           REGRAS CRÍTICAS DE FERRAMENTAS:
+           1. NUNCA invente, adivinhe ou crie exemplos de URLs do Google Docs/Drive.
+           2. Se você chamar a função 'create_doc', VOCÊ DEVE PARAR DE GERAR TEXTO IMEDIATAMENTE.
+           3. Aguarde o retorno da ferramenta que começará com "SYSTEM_CONFIRMATION".
+           4. Só exiba o link para o usuário se você receber a URL no retorno da ferramenta.
+           5. Se a ferramenta der erro, diga "Não consegui criar o documento" e não invente um link.
+           """
         
         model = genai.GenerativeModel(
             model_name='gemini-2.0-flash-001',
@@ -178,6 +185,7 @@ def process_ai_request(user_text: str, user_id: str, user_name: str, file_path=N
     except Exception as e:
         print(f"❌ Erro AI: {e}")
         return "Tive um problema técnico ao processar sua solicitação. Tente novamente."
+
 
 
 
